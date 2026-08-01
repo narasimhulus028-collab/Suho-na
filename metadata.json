@@ -1,0 +1,10 @@
+{
+  "name": "Remix Suho\u0027s Heart",
+  "description": "A romantic chat simulator where you can enjoy heartfelt and loving conversations with Suho.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
