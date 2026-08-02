@@ -54,140 +54,57 @@ export default function RelationshipBar({
   const currentOutfitObj = OUTFITS.find(o => o.id === stats.outfit) || OUTFITS[0];
 
   return (
-    <div className={`p-3 sm:p-4 rounded-3xl shadow-lg border transition-all mb-3 ${
+    <div className={`py-2 px-3 sm:px-4 rounded-2xl shadow-sm border transition-all mb-2 ${
       isDarkMode 
         ? 'bg-[#1e1316]/90 border-rose-900/40 text-rose-100' 
         : 'bg-white/90 border-pink-100 text-slate-800'
-    } backdrop-blur-md`}>
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+    } backdrop-blur-md max-w-3xl mx-auto w-full`}>
+      <div className="flex items-center justify-between gap-2">
         
-        {/* Left: Mood & Avatar/Outfit Badge */}
-        <div className="flex items-center gap-3 shrink-0">
-          <div className="relative group cursor-pointer" onClick={() => setIsOutfitModalOpen(true)}>
-            <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl overflow-hidden border-2 border-pink-400 shadow-md group-hover:scale-105 transition-transform">
+        {/* Left: Mood & Outfit Badge */}
+        <div className="flex items-center gap-2.5 shrink-0">
+          <div className="relative group cursor-pointer" onClick={() => setIsOutfitModalOpen(true)} title="Change Suho-na's Outfit">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl overflow-hidden border-2 border-pink-400 shadow-xs group-hover:scale-105 transition-transform">
               <img 
                 src={currentOutfitObj.previewUrl} 
                 alt="Suho-na Outfit" 
                 className="w-full h-full object-cover"
               />
             </div>
-            <span className="absolute -bottom-1 -right-1 bg-pink-500 text-white p-1 rounded-full text-[10px] shadow">
-              <Shirt size={10} />
+            <span className="absolute -bottom-1 -right-1 bg-pink-500 text-white p-0.5 rounded-full text-[8px] shadow">
+              <Shirt size={8} />
             </span>
           </div>
 
           <div>
-            <div className="flex items-center gap-2">
-              <span className="font-extrabold text-sm tracking-tight text-pink-600 dark:text-rose-300">Suho-na</span>
+            <div className="flex items-center gap-1.5">
+              <span className="font-extrabold text-xs tracking-tight text-pink-600 dark:text-rose-300">Suho-na</span>
               {/* Mood Pill */}
-              <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold border shadow-xs ${
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border shadow-xs ${
                 isDarkMode ? 'bg-rose-950/60 border-rose-800/50 text-rose-200' : 'bg-pink-50 border-pink-200 text-pink-700'
               }`}>
                 <span>{MOOD_EMOJIS[stats.mood] || '🥰'}</span>
                 <span>{stats.mood}</span>
               </span>
             </div>
-
-            <div className="flex items-center gap-2 mt-1 text-[11px] font-medium text-pink-500/80">
-              <span className="flex items-center gap-0.5"><Flame size={12} className="text-orange-500 fill-orange-500" /> {stats.streakDays} Day Streak</span>
-              <span>•</span>
-              <span className="flex items-center gap-0.5"><Shirt size={12} /> {currentOutfitObj.name}</span>
-            </div>
           </div>
         </div>
 
-        {/* Action Buttons using freed space smoothly */}
-        <div className="flex items-center gap-2 flex-wrap justify-start sm:justify-end flex-1 w-full sm:w-auto">
-          {onOpenCall && (
-            <button
-              type="button"
-              onClick={onOpenCall}
-              className="px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-md hover:brightness-105 hover:scale-105 active:scale-95"
-              title="Start Real-time Voice Call"
-            >
-              <Phone size={14} className="animate-pulse" />
-              <span>Call</span>
-            </button>
-          )}
-
+        {/* Center/Right Stats & Outfit trigger */}
+        <div className="flex items-center gap-2 text-[11px] font-bold text-pink-500 shrink-0">
+          <span className="flex items-center gap-1 bg-orange-500/10 text-orange-600 dark:text-orange-400 px-2 py-0.5 rounded-full text-[10px]">
+            <Flame size={11} className="fill-orange-500" /> {stats.streakDays}d Streak
+          </span>
+          <span className="flex items-center gap-1 bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-full text-[10px]">
+            <Trophy size={11} className="fill-amber-400" /> LVL {currentLevel}
+          </span>
           <button
             type="button"
-            onClick={() => onQuickAction('morning')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border shadow-xs hover:scale-105 active:scale-95 ${
-              isDarkMode ? 'bg-amber-950/40 border-amber-800/40 text-amber-200 hover:bg-amber-900/50' : 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100'
-            }`}
-            title="Send Good Morning Greeting"
+            onClick={() => setIsOutfitModalOpen(true)}
+            className="hidden sm:flex items-center gap-1 px-2 py-0.5 rounded-full border border-pink-200 text-pink-600 text-[10px] hover:bg-pink-50 transition-colors"
           >
-            <Sun size={14} className="text-amber-500" />
-            <span>Good Morning</span>
+            <Shirt size={11} /> Change Outfit
           </button>
-
-          <button
-            type="button"
-            onClick={() => onQuickAction('night')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border shadow-xs hover:scale-105 active:scale-95 ${
-              isDarkMode ? 'bg-indigo-950/40 border-indigo-800/40 text-indigo-200 hover:bg-indigo-900/50' : 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100'
-            }`}
-            title="Send Good Night Greeting"
-          >
-            <Moon size={14} className="text-indigo-400" />
-            <span>Good Night</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={onOpenRoleplay}
-            className="px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow-md hover:brightness-105 hover:scale-105 active:scale-95"
-          >
-            <Sparkles size={14} />
-            <span>Roleplay</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={onOpenGames}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border shadow-xs hover:scale-105 active:scale-95 ${
-              isDarkMode ? 'bg-rose-950/40 border-rose-800/40 text-rose-200 hover:bg-rose-900/50' : 'bg-pink-50 border-pink-200 text-pink-700 hover:bg-pink-100'
-            }`}
-          >
-            <span>🎮 Games</span>
-          </button>
-
-          {onOpenAchievements && (
-            <button
-              type="button"
-              onClick={onOpenAchievements}
-              className="px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 bg-gradient-to-r from-amber-400 via-pink-500 to-purple-600 text-white shadow-md hover:brightness-105 hover:scale-105 active:scale-95"
-              title="View Relationship Level & Achievements"
-            >
-              <Trophy size={14} className="text-amber-200 fill-amber-200 animate-pulse" />
-              <span>LVL {currentLevel}</span>
-            </button>
-          )}
-
-          {onOpenReferrals && (
-            <button
-              type="button"
-              onClick={onOpenReferrals}
-              className="px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-md hover:brightness-105 hover:scale-105 active:scale-95"
-              title="Refer Friends & Earn Free Rewards"
-            >
-              <Gift size={14} className="text-amber-200 animate-bounce" />
-              <span>Refer & Earn</span>
-            </button>
-          )}
-
-          {onOpenPremiumGallery && (
-            <button
-              type="button"
-              onClick={onOpenPremiumGallery}
-              className="px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 bg-gradient-to-r from-amber-400 via-pink-500 to-rose-500 text-white shadow-md hover:brightness-105 hover:scale-105 active:scale-95"
-              title="Open Premium Romantic Gallery"
-            >
-              <Crown size={14} className="text-amber-200 fill-amber-300" />
-              <span>Romantic Gallery</span>
-            </button>
-          )}
         </div>
 
       </div>

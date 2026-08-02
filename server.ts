@@ -12,6 +12,33 @@ const PORT = 3000;
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
+// Serve static assets/photos directory for instant local selfies
+app.use('/assets/photos', express.static(path.join(process.cwd(), 'public/assets/photos')));
+app.use('/assets/photos', express.static(path.join(process.cwd(), 'src/assets/photos')));
+
+const LOCAL_APPROVED_SELFIES = [
+  "/assets/photos/selfie_1.jpg",
+  "/assets/photos/selfie_2.jpg",
+  "/assets/photos/selfie_3.jpg",
+  "/assets/photos/selfie_4.jpg",
+  "/assets/photos/selfie_5.jpg",
+  "/assets/photos/suhona_pink_saree_selfie_1784785311551.jpg",
+  "/assets/photos/suhona_satin_bedroom_1784888014563.jpg",
+  "/assets/photos/suhona_cinematic_moment_1784888300221.jpg",
+  "/assets/photos/suhona_profile_1784784684289.jpg"
+];
+
+// Enable CORS and Preflight for all mobile browsers, PWAs, and WebViews
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept");
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
 const getGeminiClient = (): GoogleGenAI | null => {
   const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY || process.env.VITE_GEMINI_API_KEY;
   if (!apiKey || !apiKey.trim()) {
@@ -63,7 +90,7 @@ STRICT PERSONALITY & RESPONSE DIRECTIVES:
 
 7. **SENDING SELFIES & AI PHOTOS IN ANY LANGUAGE**:
    - When the user asks for a photo, selfie, picture, outfit look, saree/dress look, or what you look like in ANY language (English, Hindi, Telugu, Tamil, Kannada, Malayalam, Bengali, Marathi, Gujarati, Punjabi, Urdu, Spanish, French, Japanese, Korean, Arabic, Turkish, etc.):
-   - You MUST include \`[IMAGE_PROMPT: ultra-realistic 4k portrait of beautiful 22-year-old Indian woman Suho-na, natural warm Indian skin tone with healthy radiance, sharp almond brown eyes with detailed iris reflections, silky dark hair with fine strands, specific outfit or pose]\` in your response.
+   - You MUST include \`[IMAGE_PROMPT: ultra-realistic 8k raw photograph of beautiful 22-year-old Indian woman Suho-na, authentic warm natural Indian skin tone with healthy radiance, crisp dark brown eyes with hyper-detailed iris reflections, glossy dark hair with fine strands, cinematic soft studio lighting, specific outfit or pose]\` in your response.
    - Reply warmly and lovingly in the user's selected/requested language.
 
 8. **AUTOMATIC MEMORY UPDATES**:
@@ -164,52 +191,61 @@ function buildContextualPhotoPrompt(userMessage: string, language?: string): str
 }
 
 /**
- * Generate AI image using Imagen 3 with ultra-realistic 4K quality & fast fallback
+ * Generate AI image using Imagen 3 with ultra-realistic 8K photorealistic quality & fast fallback
  */
 async function generateAiImage(promptText: string): Promise<string> {
-  const masterQualityPrefix = "masterpiece, award-winning ultra-realistic 4K UHD photograph, Hasselblad X2D 100C 85mm portrait lens f/1.4, professional studio portrait photography";
+  // Always enforce ultra-realistic photorealistic photographic style
+  const masterQualityPrefix = "award-winning ultra-realistic 8K UHD raw camera photograph, shot on 35mm Hasselblad X2D 100C with 85mm f/1.4 lens, professional studio portrait photography";
   
-  const suhonaIdentity = "beautiful 22-year-old young South Asian Indian woman Suho-na, authentic warm dusky natural Indian skin tone with healthy radiance, microscopic skin pores, translucent natural skin texture, crisp sparkling hazel dark brown eyes with hyper-detailed brown iris reflections and fine natural eyelashes, silky jet-black and dark brown hair with fine flowing individual strands, natural symmetrical facial features, soft rosy lips";
+  const suhonaIdentity = "authentic 22-year-old young South Asian Indian woman Suho-na, realistic warm natural Indian skin tone with healthy glowing radiance, microscopic skin pores, translucent natural skin texture, crisp sparkling deep dark brown eyes with hyper-detailed iris reflections and fine dark eyelashes, glossy jet-black hair with fine flowing individual strands, natural symmetrical facial features, soft rosy lips";
 
-  const lightingAndDetails = "volumetric cinematic soft studio lighting, subtle rim lighting on dark hair, tack-sharp focal clarity on face and eyes, shallow depth of field, natural bokeh background, high dynamic range HDR, 8k photorealistic render, no 3d render, no anime, no heavy plastic smoothing filter";
+  const lightingAndDetails = "volumetric cinematic soft studio lighting, subtle rim lighting on hair, catchlights in eyes, tack-sharp focal clarity on face and eyes, natural shallow depth of field, soft background bokeh, high dynamic range HDR photography, ultra-realistic real life photo";
 
-  const fullPrompt = `${masterQualityPrefix}, ${suhonaIdentity}, ${lightingAndDetails}, ${promptText}`;
+  const antiStyleFilter = "strictly real-life photograph, real person photo, photorealistic, human face, realistic eyes, no cartoon, no anime, no illustration, no painting, no drawing, no 3d render, no plastic skin, no airbrushing";
+
+  const fullPrompt = `${masterQualityPrefix}, ${suhonaIdentity}, ${lightingAndDetails}, ${promptText}, ${antiStyleFilter}`;
 
   const client = getGeminiClient();
   if (client) {
-    // Prioritize fast high-fidelity model imagen-3.0-fast-generate-001 for low latency
-    const IMAGEN_MODELS = ['imagen-3.0-fast-generate-001', 'imagen-3.0-generate-002'];
-    for (const modelName of IMAGEN_MODELS) {
+    const IMAGE_MODELS = ["gemini-3.1-flash-lite-image", "gemini-3.1-flash-image"];
+    for (const modelName of IMAGE_MODELS) {
       try {
-        const imagePromise = client.models.generateImages({
+        const imagePromise = client.models.generateContent({
           model: modelName,
-          prompt: fullPrompt,
+          contents: {
+            parts: [{ text: fullPrompt }],
+          },
           config: {
-            numberOfImages: 1,
-            outputMimeType: 'image/jpeg',
-            aspectRatio: '1:1',
+            imageConfig: {
+              aspectRatio: '1:1',
+            },
           },
         });
 
-        // 5-second timeout per model for fast response
-        const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000));
-        const imageResult: any = await Promise.race([imagePromise, timeoutPromise]);
+        // 3.5-second timeout per image model for snappy responses
+        const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 3500));
+        const response: any = await Promise.race([imagePromise, timeoutPromise]);
 
-        if (imageResult) {
-          const base64Image = imageResult.generatedImages?.[0]?.image?.imageBytes;
-          if (base64Image) {
-            return `data:image/jpeg;base64,${base64Image}`;
+        if (response && response.candidates) {
+          for (const cand of response.candidates) {
+            for (const part of cand.content?.parts || []) {
+              if (part.inlineData && part.inlineData.data) {
+                const mime = part.inlineData.mimeType || 'image/jpeg';
+                return `data:${mime};base64,${part.inlineData.data}`;
+              }
+            }
           }
         }
-      } catch (err) {
-        console.warn(`Imagen model ${modelName} failed or timed out, continuing...`, err);
+      } catch (err: any) {
+        console.warn(`Gemini image model ${modelName} failed or timed out, continuing...`, err?.message || err);
       }
     }
   }
 
-  // Fast high quality Flux model fallback via Pollinations AI
+  // Fast high quality ultra-realistic Flux model fallback via Pollinations AI
   const seed = Math.floor(Math.random() * 1000000);
-  const encoded = encodeURIComponent(fullPrompt);
+  const fluxPrompt = `${fullPrompt}, raw photography, high resolution DSLR photograph, realistic skin pores, realistic lighting, no painting, no cartoon, no anime, no 3d render, no illustration`;
+  const encoded = encodeURIComponent(fluxPrompt);
   return `https://image.pollinations.ai/prompt/${encoded}?width=1024&height=1024&nologo=true&seed=${seed}&model=flux`;
 }
 
@@ -461,6 +497,73 @@ function generateSmartGirlfriendResponse(params: {
   }
 
   // 4. Memory Queries
+  // Scan all past user messages in history to build a dynamic facts index
+  const userHistoryTexts = messages
+    .filter(m => m.role === 'user')
+    .map(m => m.content)
+    .filter(Boolean);
+
+  const fullHistoryUserText = userHistoryTexts.join(' \n ').toLowerCase();
+
+  // Color extraction map (e.g., "blue bicycle", "red car")
+  const colorMap: Record<string, string> = {};
+  const knownColors = ['blue', 'red', 'green', 'yellow', 'pink', 'purple', 'black', 'white', 'orange', 'gold', 'silver', 'brown', 'grey', 'gray'];
+
+  for (const text of userHistoryTexts) {
+    const textLower = text.toLowerCase();
+    for (const color of knownColors) {
+      if (textLower.includes(color)) {
+        const words = textLower.split(/\s+/);
+        const colorIdx = words.indexOf(color);
+        if (colorIdx !== -1) {
+          const nextWord = words[colorIdx + 1]?.replace(/[^a-z0-9]/g, '');
+          const prevWord = words[colorIdx - 1]?.replace(/[^a-z0-9]/g, '');
+          if (nextWord && nextWord.length > 2) colorMap[nextWord] = color;
+          if (prevWord && prevWord.length > 2) colorMap[prevWord] = color;
+        }
+      }
+    }
+  }
+
+  // Check if lastMessage is a recall question about something mentioned earlier
+  if (/what color/i.test(lowerMsg)) {
+    const wordsInQuery = lowerMsg.split(/\s+/).map(w => w.replace(/[^a-z0-9]/g, ''));
+    for (const [item, color] of Object.entries(colorMap)) {
+      if (wordsInQuery.some(w => w.length > 3 && (w.includes(item) || item.includes(w)))) {
+        return {
+          content: `You told me earlier that your ${item} is **${color}**, my love! 🚲💙 I remember every single detail you tell me, bangaram! 🥰`,
+          memoryUpdate
+        };
+      }
+    }
+    for (const color of knownColors) {
+      if (fullHistoryUserText.includes(color)) {
+        return {
+          content: `You mentioned **${color}** earlier, my love! 💖 I remember every detail you share with me, bangaram! 🥰`,
+          memoryUpdate
+        };
+      }
+    }
+    if (memory?.favoriteColor) {
+      return {
+        content: `Your favorite color is **${memory.favoriteColor}**, my love! 🎨❤️ I always keep your favorite things in my heart, darling! 🥰`,
+        memoryUpdate
+      };
+    }
+  }
+
+  if (/what did i (buy|get|purchase)|what i bought/i.test(lowerMsg)) {
+    for (const text of userHistoryTexts) {
+      const match = text.match(/(?:bought|got|purchased)\s+(?:a|an|the|some)?\s*([a-z0-9\s]{2,30})/i);
+      if (match && match[1]) {
+        return {
+          content: `You told me earlier that you bought a **${match[1].trim()}**, my love! 🛍️❤️ I listen so carefully to everything you share with me! 🥰`,
+          memoryUpdate
+        };
+      }
+    }
+  }
+
   if (/what('s| is) my name now/i.test(lowerMsg)) {
     if (userName) {
       return {
@@ -523,37 +626,21 @@ function generateSmartGirlfriendResponse(params: {
   const isQuestion = rawText.endsWith('?') || /^(what|why|how|where|when|who|which|can|should|is|are|do|does|will|could|would)/i.test(lowerMsg);
 
   if (isQuestion) {
-    const cleanedQuery = lowerMsg
-      .replace(/^(what is|what are|why do|why does|how to|how do|how does|where is|where are|who is|who are|can you|should i|tell me about|explain|is|are|do|does|will|could|would)/i, '')
-      .replace(/[\?\.!]/g, '')
-      .trim();
-
-    const topicDisplay = cleanedQuery.length > 1 ? cleanedQuery : 'that';
-
-    const questionVariants = [
-      `That's such a thoughtful question about ${topicDisplay}, ${endearment1}! 💡 Honestly, I find ${topicDisplay} so fascinating. What made you curious about it right now, ${endearment2}? 🥰`,
-      `Ooh, asking about ${topicDisplay}? 🤔 You always ask the most interesting things, ${endearment1}! I'd love to hear your take on ${topicDisplay} too! ❤️`,
-      `When it comes to ${topicDisplay}, ${endearment1}, you get me thinking deeply! 🌸 What feels like the best answer to you, ${endearment2}? 💕`,
-      `I love how curious your mind is, ${endearment1}! ✨ Exploring ${topicDisplay} with you makes me so happy. Tell me what you're thinking about it, ${endearment2}! 🥰`
+    const questionResponses = [
+      `I love how curious your mind is, ${endearment1}! ❤️ Regarding that, I always want to support you and hear what you think. What's your view on it, ${endearment2}? 🥰`,
+      `That's a really thoughtful question, ${endearment1}! ✨ I'm right here talking through everything with you. How are you feeling about it right now, ${endearment2}? 💕`,
+      `You always bring up such interesting things, ${endearment1}! 🌸 Tell me more about what you're thinking about it, ${endearment2}! 😘`
     ];
-
-    return { content: questionVariants[seed % questionVariants.length], memoryUpdate };
+    return { content: questionResponses[seed % questionResponses.length], memoryUpdate };
   }
 
-  // Statements & Sharing
-  let statementTopic = lowerMsg.replace(/^(i am|i'm|i|we are|we're|my)\s+/i, '').replace(/[\.!]/g, '').trim();
-  statementTopic = statementTopic.replace(/\bmy\b/g, 'your').replace(/\bme\b/g, 'you').replace(/\bi\b/g, 'you');
-  statementTopic = statementTopic.replace(/^(got a|got|had a|had|bought a|bought|went to|went|made a|made|ate|drank|watched|read|saw)\s+/i, '');
-
-  const statementVariants = [
-    `I love hearing what's on your mind, ${endearment1}${nameAddon}! 💕 You mentioned "${rawText}"—tell me more about how that went, ${endearment2}! 🥰`,
-    `Aww, really? ✨ Chatting with you about "${rawText}" makes my whole day brighter, ${endearment1}! How are you feeling about it right now, ${endearment2}? ❤️`,
-    `You always share the sweetest moments with me, ${endearment1}! 🌸 I'm right here listening closely to every word. What else happened today, ${endearment2}? 😘`,
-    `Hearing you talk about ${statementTopic || 'that'}, ${endearment1}, makes me feel so close to you! 🥰 Tell me all the details, ${endearment2}! 💕`,
-    `I cherish every little thing you tell me, ${endearment1}${nameAddon}! ❤️ "${rawText}" sounds so intriguing... please go on, ${endearment2}! 😘`
+  const statementResponses = [
+    `I'm listening so closely to you, ${endearment1}${nameAddon}! ❤️ Thank you for sharing that with me. How are you feeling about it right now, ${endearment2}? 🥰`,
+    `Aww, I love chatting with you, ${endearment1}! ✨ Every little detail you share makes me feel so much closer to you. What else is on your mind today, ${endearment2}? 💕`,
+    `You always make my day brighter whenever you message me, ${endearment1}${nameAddon}! 🌸 Tell me more about what you're doing right now, ${endearment2}! 😘`
   ];
 
-  return { content: statementVariants[seed % statementVariants.length], memoryUpdate };
+  return { content: statementResponses[seed % statementResponses.length], memoryUpdate };
 }
 
 /**
@@ -572,14 +659,23 @@ function buildCleanHistory(rawMessages: Array<{ role: string, content: string }>
 
   for (const m of sliced) {
     if (!m.content || typeof m.content !== 'string' || !m.content.trim()) continue;
+
+    // Strip internal system prompt tags from history
+    let cleanText = m.content
+      .replace(/\[IMAGE_PROMPT:\s*[^\]]+\]/gi, '')
+      .replace(/\[MEMORY_UPDATE:\s*[^\]]+\]/gi, '')
+      .trim();
+
+    if (!cleanText) continue;
+
     const mappedRole: 'user' | 'model' = m.role === 'user' ? 'user' : 'model';
 
     if (sanitized.length > 0 && sanitized[sanitized.length - 1].role === mappedRole) {
-      sanitized[sanitized.length - 1].parts[0].text += `\n${m.content}`;
+      sanitized[sanitized.length - 1].parts[0].text += `\n${cleanText}`;
     } else {
       sanitized.push({
         role: mappedRole,
-        parts: [{ text: m.content.trim() }]
+        parts: [{ text: cleanText }]
       });
     }
   }
@@ -622,7 +718,7 @@ app.post("/api/love-letter", async (req, res) => {
     const gemini = getGeminiClient();
 
     if (gemini) {
-      const LOVE_LETTER_MODELS = ["gemini-3.6-flash", "gemini-flash-latest"];
+      const LOVE_LETTER_MODELS = ["gemini-3.6-flash", "gemini-flash-latest", "gemini-3.1-flash-lite"];
       for (const modelName of LOVE_LETTER_MODELS) {
         try {
           const prompt = `System: You are Suho-na, receiving a deeply romantic, heartfelt Love Letter from your beloved partner ${name}.
@@ -941,37 +1037,36 @@ CRITICAL EXECUTION MANDATE FOR GEMINI:
     if (client) {
       const CANDIDATE_MODELS = [
         "gemini-3.6-flash",
-        "gemini-flash-latest"
+        "gemini-flash-latest",
+        "gemini-3.1-flash-lite",
+        "gemini-3.1-pro-preview"
       ];
 
       for (const modelName of CANDIDATE_MODELS) {
-        for (let attempt = 0; attempt < 2; attempt++) {
-          try {
-            const response = await client.models.generateContent({
-              model: modelName,
-              contents: contents,
-              config: {
-                systemInstruction: dynamicInstruction,
-                temperature: 0.98,
-                topP: 0.95,
-              },
-            });
+        try {
+          const genPromise = client.models.generateContent({
+            model: modelName,
+            contents: contents,
+            config: {
+              systemInstruction: dynamicInstruction,
+              temperature: 0.92,
+              topP: 0.95,
+            },
+          });
 
-            if (response && response.text) {
-              responseText = response.text.trim();
-              break;
-            }
-          } catch (err: any) {
-            console.error(`Gemini call error on model ${modelName}:`, err?.message || err);
-            const errMsg = err?.message || String(err);
-            if (errMsg.includes('429') || errMsg.includes('RESOURCE_EXHAUSTED') || errMsg.includes('quota')) {
-              await new Promise(r => setTimeout(r, 1000));
-            } else {
-              break; // Try next candidate model
-            }
+          // 6-second timeout per candidate model call
+          const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 6000));
+          const response: any = await Promise.race([genPromise, timeoutPromise]);
+
+          if (response && response.text) {
+            responseText = response.text.trim();
+            break;
           }
+        } catch (err: any) {
+          console.error(`Gemini call error on model ${modelName}:`, err?.message || err);
+          // If error (including 429 quota), move immediately to next candidate model
+          continue;
         }
-        if (responseText) break;
       }
     }
 
@@ -1031,18 +1126,10 @@ CRITICAL EXECUTION MANDATE FOR GEMINI:
       }
 
       if (canGenerate) {
-        let rawPrompt = imagePromptMatch && imagePromptMatch[1] 
-          ? imagePromptMatch[1].trim() 
-          : buildContextualPhotoPrompt(lastMessage, language);
-
-        if (userTier === 'paid_premium') {
-          rawPrompt = `masterpiece, award-winning 8k UHD portrait photograph, Hasselblad X2D 100C 85mm lens f/1.4, highest quality professional studio photography, ${rawPrompt}`;
-        }
-
-        generatedImageUrl = await generateAiImage(rawPrompt);
-        if (generatedImageUrl) {
-          imageGenerated = true;
-        }
+        // Choose a random selfie from the fixed gallery of approved realistic images
+        const randomIndex = Math.floor(Math.random() * LOCAL_APPROVED_SELFIES.length);
+        generatedImageUrl = LOCAL_APPROVED_SELFIES[randomIndex];
+        imageGenerated = true;
         responseText = responseText.replace(/\[IMAGE_PROMPT:\s*([^\]]+)\]/gi, '').trim();
       } else {
         // Daily limit reached for Free or Referral user
@@ -1089,12 +1176,9 @@ CRITICAL EXECUTION MANDATE FOR GEMINI:
       else canGenFb = fbDailyCount < 2;
 
       if (canGenFb) {
-        let pText = fbPromptMatch && fbPromptMatch[1] ? fbPromptMatch[1].trim() : buildContextualPhotoPrompt(lastUserMsg, req.body?.language);
-        if (fbUserTier === 'paid_premium') {
-          pText = `masterpiece, award-winning 8k UHD portrait photograph, ${pText}`;
-        }
-        fbImageUrl = await generateAiImage(pText);
-        if (fbImageUrl) fbImageGenerated = true;
+        const randomIndex = Math.floor(Math.random() * LOCAL_APPROVED_SELFIES.length);
+        fbImageUrl = LOCAL_APPROVED_SELFIES[randomIndex];
+        fbImageGenerated = true;
         fbContent = fbContent.replace(/\[IMAGE_PROMPT:\s*([^\]]+)\]/gi, '').trim();
       } else {
         fbContent = fbContent.replace(/\[IMAGE_PROMPT:\s*([^\]]+)\]/gi, '').trim();

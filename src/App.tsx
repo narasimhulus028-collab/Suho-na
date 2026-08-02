@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Send, Heart, User, Loader2, Sparkles, MessageCircle, Mic, MicOff, Image as ImageIcon, Volume2, VolumeX, Moon, Sun, Download, Smartphone, Globe, Gamepad2, Phone, PhoneOff, Camera, Crown, Lock, Trophy, UserCheck, ShieldCheck, Gift, Feather, Mail, Smile } from 'lucide-react';
+import { Send, Heart, User, Loader2, Sparkles, MessageCircle, Mic, MicOff, Image as ImageIcon, Volume2, VolumeX, Moon, Sun, Download, Smartphone, Globe, Gamepad2, Phone, PhoneOff, Camera, Crown, Lock, Trophy, UserCheck, ShieldCheck, Gift, Feather, Mail, Smile, Settings as SettingsIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import { Message, GalleryImage, UserMemory, RelationshipStats, VoiceSettings, ExtendedSettings, RoleplayScenario, UserAccount, Achievement, UnlockedReward, ProgressStats, ReferralStats, ReferralRecord, LoveLetter, HEART_REACTIONS } from './types';
@@ -29,6 +29,9 @@ import { CHAT_STYLES } from './lib/styles';
 import { speakText, stopSpeaking } from './lib/voice';
 import { getUniqueProactiveMessage } from './lib/proactiveMessages';
 import { detectUserTier, getDailyPhotoTracker, incrementDailyPhotoCount } from './lib/photoUtils';
+import { fetchWithRetry, generateClientFallbackResponse } from './lib/api';
+import { preloadLocalSelfies, getRandomApprovedSelfie } from './lib/photoGallery';
+import { loadSelfiesFromDB, saveSelfiesToDB, deleteSelfieFromDB } from './lib/selfieStorage';
 
 import suhonaAvatarImg from './assets/images/suhona_avatar.jpg';
 import suhonaPinkSareeImg from './assets/images/suhona_pink_saree_selfie_1784785311551.jpg';
@@ -36,6 +39,8 @@ import suhonaProfileImg from './assets/images/suhona_profile_1784784684289.jpg';
 import suhonaHeartIconImg from './assets/images/suhona_heart_icon_1784788021969.jpg';
 import suhonaPwaIconImg from './assets/images/suhona_pwa_icon_1784794283449.jpg';
 import suhonaSatinBedroomImg from './assets/images/suhona_satin_bedroom_1784888014563.jpg';
+
+export const OFFICIAL_SUHONA_AVATAR = suhonaAvatarImg;
 
 export const PRESET_SUHONA_IMAGES: GalleryImage[] = [
   {
@@ -790,8 +795,14 @@ export default function App() {
     localStorage.setItem('suhona_memory', JSON.stringify(memory));
   }, [memory]);
 
+  // Preload local photorealistic selfies on app launch for instant display and offline usage
+  useEffect(() => {
+    preloadLocalSelfies();
+  }, []);
+
+  // Permanent official profile picture for Suho-na
   const [currentAvatar, setCurrentAvatar] = useState(() => {
-    return localStorage.getItem('suhona_avatar') || suhonaAvatarImg;
+    return OFFICIAL_SUHONA_AVATAR;
   });
 
   const [currentBackground, setCurrentBackground] = useState<string | null>(() => {
@@ -808,6 +819,32 @@ export default function App() {
     }
     return PRESET_SUHONA_IMAGES;
   });
+
+  // Hydrate gallery images permanently from IndexedDB on startup
+  useEffect(() => {
+    loadSelfiesFromDB()
+      .then((dbImages) => {
+        if (dbImages && dbImages.length > 0) {
+          setGalleryImages((prev) => {
+            const existingIds = new Set(prev.map((i) => i.id));
+            const newFromDb = dbImages.filter((i) => !existingIds.has(i.id));
+            return [...newFromDb, ...prev];
+          });
+        }
+      })
+      .catch((err) => {
+        console.warn('Failed loading selfies from IndexedDB:', err);
+      });
+  }, []);
+
+  // Save gallery images metadata to localStorage safely
+  useEffect(() => {
+    try {
+      localStorage.setItem('suhona_gallery', JSON.stringify(galleryImages));
+    } catch (e) {
+      console.warn('localStorage quota exceeded for suhona_gallery, selfies remain safe in IndexedDB');
+    }
+  }, [galleryImages]);
 
   const [isVoiceEnabled, setIsVoiceEnabled] = useState(() => {
     return localStorage.getItem('suhona_voice_enabled') === 'true';
@@ -1277,18 +1314,29 @@ export default function App() {
     }
   };
 
-  const handleUploadImage = (urls: string | string[]) => {
+  const handleUploadImage = async (urls: string | string[]) => {
     const urlArray = Array.isArray(urls) ? urls : [urls];
+    if (urlArray.length === 0) return;
+
     const newImages: GalleryImage[] = urlArray.map((url, idx) => ({
-      id: (Date.now() + idx).toString(),
+      id: `selfie_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 7)}`,
       url,
       timestamp: Date.now() + idx,
     }));
+
     setGalleryImages((prev) => [...newImages, ...prev]);
+    await saveSelfiesToDB(newImages);
+    showToast(
+      'Selfies Saved Permanently! 📸',
+      `Added ${newImages.length} selfie${newImages.length > 1 ? 's' : ''} to Selfie Gallery Manager!`,
+      '📸'
+    );
   };
 
   const handleDeleteImage = (id: string) => {
     setGalleryImages((prev) => prev.filter((img) => img.id !== id));
+    deleteSelfieFromDB(id);
+    showToast('Selfie Removed', 'Photo removed from selfie gallery', '🗑️');
   };
 
   const handleSelectAvatar = (url: string) => {
@@ -1367,20 +1415,43 @@ export default function App() {
 
       console.log('Gemini API Request Payload (Chat History & Memory Context):', payload);
 
-      const responsePromise = fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
       const lastUserMsg = updatedMessages[updatedMessages.length - 1];
       const isVoiceReq = lastUserMsg?.isVoiceMessage || voiceSettings.enabled;
 
-      const [response] = await Promise.all([responsePromise, minTypingTime]);
+      let data: any = null;
 
-      if (!response.ok) throw new Error('Failed to talk to Suho-na');
+      try {
+        const [response] = await Promise.all([
+          fetchWithRetry('/api/chat', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+          }, 3, 1000),
+          minTypingTime
+        ]);
 
-      const data = await response.json();
+        data = await response.json();
+      } catch (fetchErr) {
+        console.error('All 3 fetch attempts to /api/chat failed:', fetchErr);
+        // Fallback to client-side smart response so user's message is NEVER lost
+        // and every user message gets a warm, sweet AI response!
+        const fallbackContent = generateClientFallbackResponse(
+          lastUserMsg?.content || '',
+          memory,
+          targetLang,
+          currentStyle
+        );
+        data = {
+          content: fallbackContent,
+          imageUrl: undefined,
+          imageGenerated: false
+        };
+      }
+
+      const userAskedPhoto = /\b(photo|selfie|picture|pic|image|foto|dekhao|bhej|send)\b/i.test(lastUserMsg?.content || '');
+      if (userAskedPhoto && !data.imageUrl) {
+        data.imageUrl = getRandomApprovedSelfie(galleryImages);
+        data.imageGenerated = true;
+      }
 
       if (data.imageGenerated || data.imageUrl) {
         incrementDailyPhotoCount();
@@ -1425,15 +1496,7 @@ export default function App() {
         trustLevel: Math.min(100, prev.trustLevel + 1)
       }));
     } catch (error) {
-      console.error('Error in chat API fetch:', error);
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: "I'm having a little trouble connecting right now, my love. Please try sending your message again! ❤️",
-        timestamp: Date.now(),
-      };
-      setMessages((prev) => [...prev, errorMessage]);
-      speak(errorMessage.content);
+      console.error('Unexpected error in sendMessageToApi:', error);
     } finally {
       setIsLoading(false);
     }
@@ -1455,27 +1518,47 @@ export default function App() {
     const tracker = getDailyPhotoTracker();
     const userTier = detectUserTier(isPremium, isPaidPremium);
 
-    const response = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        messages: sanitizeMessagesForApi(updatedMessages),
+    let data: any = null;
+
+    try {
+      const response = await fetchWithRetry('/api/chat', {
+        method: 'POST',
+        body: JSON.stringify({ 
+          messages: sanitizeMessagesForApi(updatedMessages),
+          memory,
+          language: targetLang,
+          style: currentStyle,
+          relationshipStats,
+          roleplayId: activeRoleplayId,
+          isFinalFreeMessage,
+          isPremium,
+          isPaidPremium,
+          userTier,
+          dailyPhotoCount: tracker.count
+        }),
+      }, 3, 1000);
+
+      data = await response.json();
+    } catch (fetchErr) {
+      console.error('All 3 fetch attempts to /api/chat in voice mode failed:', fetchErr);
+      const fallbackContent = generateClientFallbackResponse(
+        text,
         memory,
-        language: targetLang,
-        style: currentStyle,
-        relationshipStats,
-        roleplayId: activeRoleplayId,
-        isFinalFreeMessage,
-        isPremium,
-        isPaidPremium,
-        userTier,
-        dailyPhotoCount: tracker.count
-      }),
-    });
+        targetLang,
+        currentStyle
+      );
+      data = {
+        content: fallbackContent,
+        imageUrl: undefined,
+        imageGenerated: false
+      };
+    }
 
-    if (!response.ok) throw new Error('Failed to speak to Suho-na');
-
-    const data = await response.json();
+    const voiceAskedPhoto = /\b(photo|selfie|picture|pic|image|foto|dekhao|bhej|send)\b/i.test(text);
+    if (voiceAskedPhoto && !data.imageUrl) {
+      data.imageUrl = getRandomApprovedSelfie(galleryImages);
+      data.imageGenerated = true;
+    }
 
     if (data.imageGenerated || data.imageUrl) {
       incrementDailyPhotoCount();
@@ -1631,7 +1714,7 @@ export default function App() {
   };
 
   return (
-    <div className={`flex flex-col h-screen font-sans transition-colors duration-500 selection:bg-pink-200 ${
+    <div className={`flex flex-col h-screen w-full max-w-full overflow-x-hidden font-sans transition-colors duration-500 selection:bg-pink-200 ${
       isDarkMode ? 'bg-[#120a0c] text-rose-50' : 'bg-[#FFF5F7] text-slate-800'
     }`}>
       {/* Onboarding Overlay */}
@@ -1646,7 +1729,7 @@ export default function App() {
             <motion.div 
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
-              className={`max-w-md w-full p-8 rounded-[2rem] shadow-2xl border text-center space-y-6 ${
+              className={`max-w-md w-full p-6 sm:p-8 rounded-[2rem] shadow-2xl border text-center space-y-6 ${
                 isDarkMode ? 'bg-[#1a1012] border-rose-900/30' : 'bg-white border-pink-100'
               }`}
             >
@@ -1693,48 +1776,123 @@ export default function App() {
       </AnimatePresence>
 
       {/* Header */}
-      <header className={`backdrop-blur-md border-b py-4 px-6 sticky top-0 z-10 flex items-center justify-between transition-colors duration-500 ${
-        isDarkMode ? 'bg-[#1a1012]/80 border-rose-900/30' : 'bg-white/80 border-pink-100'
+      <header className={`backdrop-blur-md border-b py-2 sm:py-2.5 px-2.5 sm:px-6 sticky top-0 z-40 transition-colors duration-500 w-full max-w-full ${
+        isDarkMode ? 'bg-[#1a1012]/95 border-rose-900/40' : 'bg-white/95 border-pink-100'
       }`}>
-        <div className="flex items-center gap-3">
-          <div className="relative group cursor-pointer" onClick={() => setIsAvatarModalOpen(true)} title="Change Suho-na's Profile Picture">
-            <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-pink-300 shadow-sm relative">
-              <img 
-                src={currentAvatar} 
-                alt="Suho-na" 
-                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
-              />
-              <div className="absolute inset-0 bg-pink-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
-                <Camera size={18} />
+        <div className="flex items-center justify-between gap-1.5 sm:gap-3 max-w-7xl mx-auto w-full">
+          
+          {/* Left: Suho-na Profile */}
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="relative group cursor-pointer" onClick={() => setIsAvatarModalOpen(true)} title="Change Suho-na's Profile Picture">
+              <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-full overflow-hidden border-2 border-pink-400 shadow-sm relative">
+                <img 
+                  src={currentAvatar} 
+                  alt="Suho-na" 
+                  className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
+                />
+                <div className="absolute inset-0 bg-pink-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                  <Camera size={14} />
+                </div>
               </div>
+              <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 border-2 border-white rounded-full"></div>
             </div>
-            <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-white rounded-full"></div>
+            <div>
+              <h1 className="text-xs sm:text-base font-extrabold text-pink-600 dark:text-pink-400 flex items-center gap-1 leading-tight">
+                Suho-na <Heart size={14} className="fill-pink-500 text-pink-500 shrink-0" />
+              </h1>
+              <p className="text-[9px] text-pink-400 font-medium tracking-wide uppercase truncate max-w-[75px] sm:max-w-none">{t.subTitle}</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-pink-600 flex items-center gap-1.5">
-              Suho-na <Heart size={18} className="fill-pink-500 text-pink-500" />
-            </h1>
-            <p className="text-[10px] text-pink-400 font-medium tracking-wide uppercase">{t.subTitle}</p>
-          </div>
-        </div>
-        
-        <div className="flex items-center gap-2">
-          {/* Quick Style Mode Selector */}
-          <div className="relative">
+
+          {/* Center/Right: Action Buttons (Scrollable horizontally on mobile, or flex wrap) */}
+          <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto scrollbar-hide py-0.5 px-0.5 shrink max-w-full">
+            
+            {/* 1. 💎 Premium Button */}
+            <button
+              type="button"
+              onClick={() => setIsPremiumModalOpen(true)}
+              className="px-2 sm:px-3 py-1.5 rounded-full bg-gradient-to-r from-amber-400 via-pink-500 to-rose-500 text-white text-[11px] sm:text-xs font-black shadow-xs transition-all hover:scale-105 active:scale-95 flex items-center gap-1 shrink-0"
+              title="Upgrade to Suho-na Premium"
+            >
+              <Crown size={13} className="fill-amber-200 text-amber-100 shrink-0" />
+              <span className="whitespace-nowrap">💎 Premium</span>
+            </button>
+
+            {/* 2. 🎁 Refer & Earn Button */}
+            <button
+              type="button"
+              onClick={() => setIsReferralModalOpen(true)}
+              className="px-2 sm:px-3 py-1.5 rounded-full bg-gradient-to-r from-emerald-500 to-teal-600 text-white text-[11px] sm:text-xs font-black shadow-xs transition-all hover:scale-105 active:scale-95 flex items-center gap-1 shrink-0"
+              title="Refer & Earn Free Rewards"
+            >
+              <Gift size={13} className="text-amber-200 animate-bounce shrink-0" />
+              <span className="whitespace-nowrap">🎁 Refer & Earn</span>
+            </button>
+
+            {/* 3. 📸 Romantic Gallery (LOCKED for non-premium users) */}
             <button
               type="button"
               onClick={() => {
-                setIsStyleMenuOpen(!isStyleMenuOpen);
+                if (!isPremium) {
+                  setIsPremiumModalOpen(true);
+                } else {
+                  setIsPremiumGalleryOpen(true);
+                }
+              }}
+              className={`px-2 sm:px-3 py-1.5 rounded-full text-[11px] sm:text-xs font-black shadow-xs transition-all hover:scale-105 active:scale-95 flex items-center gap-1 shrink-0 ${
+                isPremium
+                  ? 'bg-gradient-to-r from-pink-500 via-purple-500 to-rose-500 text-white'
+                  : 'bg-slate-900 text-rose-200 border border-pink-500/30'
+              }`}
+              title={isPremium ? "Open Romantic Gallery" : "Romantic Gallery (Locked for Premium Users)"}
+            >
+              <ImageIcon size={13} className="shrink-0" />
+              <span className="whitespace-nowrap">📸 Romantic Gallery</span>
+              {!isPremium && <Lock size={11} className="text-amber-400 ml-0.5 shrink-0" />}
+            </button>
+
+          </div>
+
+          {/* Far Right: ⚙️ Settings Button (ALWAYS VISIBLE in top-right) */}
+          <button 
+            type="button"
+            onClick={() => setCurrentTab(currentTab === 'settings' ? 'chat' : 'settings')}
+            className={`p-2 sm:p-2.5 rounded-full transition-all flex items-center justify-center shrink-0 border shadow-xs cursor-pointer ${
+              currentTab === 'settings' 
+                ? 'bg-pink-500 text-white border-pink-500 shadow-md ring-2 ring-pink-300' 
+                : 'text-pink-600 bg-pink-50 dark:bg-rose-950/60 border-pink-200 dark:border-rose-900/60 hover:bg-pink-100'
+            }`}
+            title="Open App Settings & Features"
+          >
+            <SettingsIcon size={18} className={currentTab === 'settings' ? 'animate-spin-slow' : ''} />
+          </button>
+
+        </div>
+      </header>
+
+      {/* Secondary Top Bar: Language & Chat Style Dropdowns */}
+      <div className={`py-2 px-3 sm:px-6 border-b z-30 transition-colors duration-500 w-full relative ${
+        isDarkMode ? 'bg-[#150d0f]/95 border-rose-900/30' : 'bg-pink-50/90 border-pink-100'
+      }`}>
+        <div className="flex items-center justify-between gap-2 max-w-7xl mx-auto w-full relative">
+          
+          {/* Chat Style Mode Selector */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsStyleMenuOpen((prev) => !prev);
                 setIsLangMenuOpen(false);
               }}
-              className={`px-3 py-1.5 rounded-full border transition-all flex items-center gap-1.5 text-xs font-bold shadow-sm ${
-                isDarkMode ? 'border-pink-500/50 bg-pink-500/10 text-rose-200 hover:bg-pink-500/20' : 'border-pink-300 bg-pink-50 text-pink-600 hover:bg-pink-100'
+              className={`px-3 sm:px-3.5 py-1.5 rounded-full border transition-all flex items-center gap-1.5 sm:gap-2 text-xs font-extrabold shadow-xs whitespace-nowrap cursor-pointer ${
+                isDarkMode ? 'border-pink-500/40 bg-pink-500/10 text-rose-200 hover:bg-pink-500/20' : 'border-pink-300 bg-white text-pink-600 hover:bg-pink-50'
               }`}
               title={t.chatStyleLabel || "Chat Style Mode"}
             >
               <span className="text-sm">{CHAT_STYLES.find(s => s.id === currentStyle)?.emoji || '💕'}</span>
-              <span className="hidden sm:inline-block max-w-[100px] truncate">
-                {CHAT_STYLES.find(s => s.id === currentStyle)?.name || 'Romantic'}
+              <span className="font-extrabold text-xs">
+                Style: {CHAT_STYLES.find(s => s.id === currentStyle)?.name || 'Romantic'}
               </span>
             </button>
 
@@ -1743,15 +1901,15 @@ export default function App() {
               {isStyleMenuOpen && (
                 <>
                   <div 
-                    className="fixed inset-0 z-40" 
+                    className="fixed inset-0 z-40 bg-black/10 backdrop-blur-[1px]" 
                     onClick={() => setIsStyleMenuOpen(false)} 
                   />
                   <motion.div 
-                    initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                    initial={{ opacity: 0, scale: 0.95, y: 5 }}
                     animate={{ opacity: 1, scale: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.95, y: 10 }}
-                    className={`absolute right-0 top-full mt-2 w-72 sm:w-80 rounded-2xl shadow-2xl border p-3 z-50 transition-all ${
-                      isDarkMode ? 'bg-[#1a1012] border-rose-900/40 text-rose-200' : 'bg-white border-pink-100 text-slate-700'
+                    exit={{ opacity: 0, scale: 0.95, y: 5 }}
+                    className={`absolute left-0 top-full mt-2 w-72 sm:w-80 rounded-2xl shadow-2xl border p-3 z-50 transition-all ${
+                      isDarkMode ? 'bg-[#1a1012] border-rose-900/60 text-rose-200' : 'bg-white border-pink-200 text-slate-700'
                     }`}
                   >
                     <div className="flex items-center justify-between pb-2 mb-2 border-b border-pink-100 dark:border-rose-900/30">
@@ -1797,42 +1955,42 @@ export default function App() {
             </AnimatePresence>
           </div>
 
-          {/* Quick Language Selector */}
+          {/* Language Selector */}
           <div className="relative">
             <button
               type="button"
-              onClick={() => {
-                setIsLangMenuOpen(!isLangMenuOpen);
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsLangMenuOpen((prev) => !prev);
                 setIsStyleMenuOpen(false);
               }}
-              className={`px-3 py-1.5 rounded-full border transition-all flex items-center gap-1.5 text-xs font-bold shadow-sm ${
+              className={`px-3 sm:px-3.5 py-1.5 rounded-full border transition-all flex items-center gap-1.5 sm:gap-2 text-xs font-extrabold shadow-xs whitespace-nowrap cursor-pointer ${
                 currentLanguage === 'auto'
-                  ? isDarkMode ? 'border-pink-500/50 bg-pink-500/10 text-rose-200' : 'border-pink-300 bg-pink-50 text-pink-600'
+                  ? isDarkMode ? 'border-pink-500/50 bg-pink-500/10 text-rose-200' : 'border-pink-300 bg-white text-pink-600'
                   : isDarkMode ? 'border-rose-900/50 bg-[#25181b] text-rose-200' : 'border-pink-200 bg-white text-slate-700'
               }`}
               title={t.selectLanguage || "Select Language"}
             >
-              <Globe size={16} className="text-pink-500" />
-              <span className="hidden sm:inline-block max-w-[120px] truncate">
-                {LANGUAGES.find(l => l.code === currentLanguage)?.nativeName || 'Auto Detect 🌐'}
+              <Globe size={16} className="text-pink-500 shrink-0" />
+              <span className="font-extrabold text-xs">
+                Language: {LANGUAGES.find(l => l.code === currentLanguage)?.nativeName || 'Auto Detect 🌐'}
               </span>
-              <span className="sm:hidden uppercase">{currentLanguage === 'auto' ? 'AUTO' : currentLanguage}</span>
             </button>
 
-            {/* Dropdown Modal */}
+            {/* Language Dropdown Modal */}
             <AnimatePresence>
               {isLangMenuOpen && (
                 <>
                   <div 
-                    className="fixed inset-0 z-40" 
+                    className="fixed inset-0 z-40 bg-black/10 backdrop-blur-[1px]" 
                     onClick={() => setIsLangMenuOpen(false)} 
                   />
                   <motion.div 
-                    initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                    initial={{ opacity: 0, scale: 0.95, y: 5 }}
                     animate={{ opacity: 1, scale: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                    exit={{ opacity: 0, scale: 0.95, y: 5 }}
                     className={`absolute right-0 top-full mt-2 w-72 sm:w-80 rounded-2xl shadow-2xl border p-3 z-50 transition-all ${
-                      isDarkMode ? 'bg-[#1a1012] border-rose-900/40 text-rose-200' : 'bg-white border-pink-100 text-slate-700'
+                      isDarkMode ? 'bg-[#1a1012] border-rose-900/60 text-rose-200' : 'bg-white border-pink-200 text-slate-700'
                     }`}
                   >
                     <div className="flex items-center justify-between pb-2 mb-2 border-b border-pink-100 dark:border-rose-900/30">
@@ -1875,169 +2033,8 @@ export default function App() {
             </AnimatePresence>
           </div>
 
-          {/* Premium Status / Message Counter Badge */}
-          <button
-            type="button"
-            onClick={() => setIsPremiumModalOpen(true)}
-            className={`px-3 py-1.5 rounded-full border text-xs font-extrabold flex items-center gap-1.5 shadow-sm transition-all hover:scale-105 ${
-              isPremium
-                ? 'bg-gradient-to-r from-amber-400/20 via-pink-500/20 to-purple-500/20 border-amber-400/50 text-amber-600 dark:text-amber-300'
-                : isLimitReached
-                ? 'bg-rose-500 text-white border-rose-600 animate-pulse'
-                : isDarkMode
-                ? 'border-pink-900/50 bg-rose-950/40 text-rose-200 hover:bg-rose-900/60'
-                : 'border-pink-200 bg-pink-50 text-pink-600 hover:bg-pink-100'
-            }`}
-            title="Suho-na Premium Status & Message Counter"
-          >
-            <Crown size={15} className={isPremium ? 'text-amber-500 fill-amber-300' : isLimitReached ? 'text-white' : 'text-pink-500'} />
-            <span>
-              {isPremium ? 'Premium Active' : `${userMessageCount}/${MAX_FREE_MESSAGES} msgs`}
-            </span>
-          </button>
-
-          {/* Relationship Level & Achievements Button */}
-          <button
-            type="button"
-            onClick={() => setIsAchievementsModalOpen(true)}
-            className="px-3 py-1.5 rounded-full border border-pink-300 dark:border-rose-900/60 bg-gradient-to-r from-pink-500/10 via-rose-500/10 to-purple-500/10 text-xs font-extrabold flex items-center gap-1.5 shadow-xs transition-all hover:scale-105 text-pink-600 dark:text-rose-300"
-            title="Relationship Level, Daily Streaks & Achievements"
-          >
-            <Trophy size={15} className="text-amber-500 fill-amber-400 animate-pulse" />
-            <span>LVL {progressStats.level}</span>
-          </button>
-
-          {/* User Account / Login Button */}
-          <button
-            type="button"
-            onClick={() => {
-              if (currentUser) {
-                setIsProfileModalOpen(true);
-              } else {
-                setIsAuthModalOpen(true);
-              }
-            }}
-            className="p-1.5 rounded-full border border-pink-200 dark:border-rose-900/50 bg-pink-50 dark:bg-rose-950/40 text-pink-600 dark:text-rose-300 transition-all hover:scale-105 flex items-center gap-1 px-2.5"
-            title={currentUser ? `Logged in as ${currentUser.username}` : "Login / Create Account"}
-          >
-            {currentUser?.profilePhotoUrl ? (
-              <img src={currentUser.profilePhotoUrl} alt="User" className="w-5 h-5 rounded-full object-cover border" />
-            ) : currentUser ? (
-              <UserCheck size={16} className="text-emerald-500" />
-            ) : (
-              <User size={16} className="text-pink-500" />
-            )}
-            <span className="text-xs font-extrabold hidden lg:inline truncate max-w-[80px]">
-              {currentUser ? currentUser.username : 'Login'}
-            </span>
-          </button>
-
-          <button 
-            onClick={() => setIsLoveLetterModalOpen(true)}
-            className="p-2 rounded-full transition-all flex items-center gap-2 px-3.5 bg-gradient-to-r from-pink-500 via-rose-500 to-purple-600 text-white shadow-md hover:brightness-105 transition-all hover:scale-105"
-            title="Write a Love Letter & View Letter Vault"
-          >
-            <Feather size={16} />
-            <span className="text-xs font-extrabold flex items-center gap-1">
-              <span>Love Letter</span>
-              {loveLetters.length > 0 && (
-                <span className="bg-white text-pink-600 px-1.5 py-0.2 rounded-full text-[10px] font-black">
-                  {loveLetters.length}
-                </span>
-              )}
-            </span>
-          </button>
-
-          <button 
-            onClick={() => setCurrentTab('chat')}
-            className={`p-2 rounded-full transition-all flex items-center gap-2 px-4 ${
-              currentTab === 'chat' 
-              ? 'bg-pink-500 text-white shadow-md' 
-              : 'text-pink-400 hover:bg-pink-50'
-            }`}
-          >
-            <MessageCircle size={18} />
-            <span className="text-xs font-bold hidden md:inline">{t.chatTab}</span>
-          </button>
-
-          <button 
-            onClick={() => setIsCallModalOpen(true)}
-            className="p-2 rounded-full transition-all flex items-center gap-2 px-3.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-md hover:brightness-105 transition-all hover:scale-105"
-            title="Start Real-time Voice Call"
-          >
-            <Phone size={16} className="animate-pulse" />
-            <span className="text-xs font-extrabold">Call Suho-na</span>
-          </button>
-
-          <button 
-            onClick={() => setCurrentTab('gallery')}
-            className={`p-2 rounded-full transition-all flex items-center gap-2 px-4 ${
-              currentTab === 'gallery' 
-              ? 'bg-pink-500 text-white shadow-md' 
-              : 'text-pink-400 hover:bg-pink-50'
-            }`}
-          >
-            <ImageIcon size={18} />
-            <span className="text-xs font-bold hidden md:inline">{t.galleryTab}</span>
-          </button>
-
-          <button 
-            onClick={() => setIsPremiumGalleryOpen(true)}
-            className="p-2 rounded-full transition-all flex items-center gap-1.5 px-3.5 bg-gradient-to-r from-amber-400 via-pink-500 to-rose-500 text-white shadow-md hover:brightness-105 hover:scale-105 active:scale-95"
-            title="Premium Romantic Gallery"
-          >
-            <Crown size={16} className="text-amber-200 fill-amber-300 animate-pulse" />
-            <span className="text-xs font-extrabold hidden md:inline">Romantic Gallery</span>
-          </button>
-          <button 
-            onClick={() => setCurrentTab('settings')}
-            className={`p-2 rounded-full transition-all flex items-center gap-2 px-4 ${
-              currentTab === 'settings' 
-              ? 'bg-pink-500 text-white shadow-md' 
-              : 'text-pink-400 hover:bg-pink-50'
-            }`}
-          >
-            <Sparkles size={18} />
-            <span className="text-xs font-bold hidden md:inline">{t.settingsTab}</span>
-          </button>
-          <button 
-            onClick={() => {
-              const updated = !voiceSettings.enabled;
-              setVoiceSettings(prev => ({ ...prev, enabled: updated }));
-              if (!updated) stopSpeaking();
-            }}
-            className={`p-2 rounded-full transition-all ${
-              voiceSettings.enabled 
-              ? 'text-pink-500 bg-pink-500/10' 
-              : 'text-slate-400 hover:bg-pink-500/10'
-            }`}
-            title={voiceSettings.enabled ? "Disable Voice" : "Enable Voice"}
-          >
-            {voiceSettings.enabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
-          </button>
-          <button 
-            onClick={() => setIsDarkMode(!isDarkMode)}
-            className={`p-2 rounded-full transition-all ${
-              isDarkMode 
-              ? 'text-yellow-400 bg-yellow-400/10' 
-              : 'text-slate-400 hover:bg-pink-50'
-            }`}
-            title={isDarkMode ? "Light Mode" : "Dark Mode"}
-          >
-            {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
-          </button>
-
-          {showInstallBtn && (
-            <button 
-              onClick={handleInstall}
-              className="p-2 rounded-full transition-all text-pink-500 bg-pink-500/10 hover:bg-pink-500/20"
-              title="Install Suho-na App"
-            >
-              <Smartphone size={20} />
-            </button>
-          )}
         </div>
-      </header>
+      </div>
 
       {currentTab === 'chat' ? (
         <>
@@ -2094,7 +2091,7 @@ export default function App() {
 
           {/* Messages Area */}
           <main 
-            className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 scrollbar-hide relative"
+            className="flex-1 overflow-y-auto p-2.5 sm:p-4 md:p-6 space-y-4 sm:space-y-6 scrollbar-hide relative w-full max-w-full overflow-x-hidden"
             style={currentBackground ? {
               backgroundImage: `url(${currentBackground})`,
               backgroundSize: 'cover',
@@ -2109,7 +2106,7 @@ export default function App() {
               }`} />
             )}
             
-            <div className="max-w-3xl mx-auto space-y-6 relative z-10">
+            <div className="w-full max-w-3xl mx-auto space-y-4 sm:space-y-6 relative z-10 px-0 sm:px-2">
               <AnimatePresence mode="popLayout">
                 {messages.map((message) => {
                   const isPickerOpen = activeReactionPickerId === message.id;
@@ -2133,14 +2130,14 @@ export default function App() {
                           />
                         </div>
                       ) : (
-                        <div className={`flex gap-3 max-w-[85%] ${message.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-                          <div className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center border ${
+                        <div className={`flex gap-2 sm:gap-3 max-w-[90%] sm:max-w-[85%] ${message.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+                          <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex-shrink-0 flex items-center justify-center border ${
                             message.role === 'user' 
                             ? 'bg-white border-pink-200 text-pink-400' 
                             : 'bg-pink-100 border-pink-200 overflow-hidden'
                           }`}>
                             {message.role === 'user' ? (
-                              <User size={16} />
+                              <User size={14} className="sm:w-4 sm:h-4" />
                             ) : (
                               <img src={currentAvatar} alt="Suho-na" className="w-full h-full object-cover" />
                             )}
@@ -2156,7 +2153,7 @@ export default function App() {
                               e.preventDefault();
                               setActiveReactionPickerId(message.id);
                             }}
-                            className={`relative px-4 py-3 rounded-2xl shadow-sm text-sm md:text-base leading-relaxed group/msg select-none transition-all ${
+                            className={`relative px-3 sm:px-4 py-2.5 sm:py-3 rounded-2xl shadow-sm text-xs sm:text-sm md:text-base leading-relaxed group/msg select-none transition-all break-words max-w-full overflow-hidden ${
                               message.role === 'user'
                                 ? 'bg-pink-500 text-white rounded-tr-none'
                                 : isDarkMode 
@@ -2344,20 +2341,20 @@ export default function App() {
           </main>
 
           {/* Input Area */}
-          <footer className={`p-4 md:p-6 border-t transition-colors duration-500 ${
+          <footer className={`p-2.5 sm:p-4 md:p-6 border-t transition-colors duration-500 w-full max-w-full overflow-hidden ${
             isDarkMode ? 'bg-[#1a1012] border-rose-900/30' : 'bg-white border-pink-100'
           }`}>
             {/* Free Limit Warning Banner */}
             {isLimitReached && (
-              <div className="max-w-3xl mx-auto mb-3 p-3.5 rounded-2xl bg-gradient-to-r from-rose-500/15 via-pink-500/10 to-purple-500/15 border border-rose-500/30 text-rose-600 dark:text-rose-300 text-xs font-bold flex flex-wrap items-center justify-between gap-2 px-4 shadow-sm">
+              <div className="max-w-3xl mx-auto mb-3 p-3 sm:p-3.5 rounded-2xl bg-gradient-to-r from-rose-500/15 via-pink-500/10 to-purple-500/15 border border-rose-500/30 text-rose-600 dark:text-rose-300 text-xs font-bold flex flex-wrap items-center justify-between gap-2 px-3 sm:px-4 shadow-sm w-full">
                 <span className="flex items-center gap-2">
-                  <Lock size={16} className="text-rose-500" />
+                  <Lock size={16} className="text-rose-500 shrink-0" />
                   <span>You've reached your free limit of 15 messages.</span>
                 </span>
                 <button 
                   type="button"
                   onClick={() => setIsPremiumModalOpen(true)}
-                  className="px-4 py-1.5 rounded-full bg-gradient-to-r from-pink-500 via-rose-500 to-purple-600 text-white text-xs font-extrabold hover:brightness-110 transition-all shadow-md active:scale-95 flex items-center gap-1"
+                  className="px-3.5 sm:px-4 py-1.5 rounded-full bg-gradient-to-r from-pink-500 via-rose-500 to-purple-600 text-white text-xs font-extrabold hover:brightness-110 transition-all shadow-md active:scale-95 flex items-center gap-1"
                 >
                   <Crown size={14} />
                   <span>Unlock Premium (₹89/mo)</span>
@@ -2366,12 +2363,12 @@ export default function App() {
             )}
 
             {/* Quick Suggestions */}
-            <div className="max-w-3xl mx-auto mb-3 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
+            <div className="max-w-3xl mx-auto mb-2.5 sm:mb-3 flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 scrollbar-hide w-full max-w-full">
               <button
                 type="button"
                 onClick={() => handleQuickPromptClick("Can you send me a selfie, sweetheart? 💕")}
                 disabled={isLoading || isLimitReached}
-                className={`whitespace-nowrap px-3.5 py-1.5 rounded-full text-xs font-bold bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow-sm transition-all flex-shrink-0 flex items-center gap-1 active:scale-95 ${
+                className={`whitespace-nowrap px-3 sm:px-3.5 py-1.5 rounded-full text-xs font-bold bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow-sm transition-all flex-shrink-0 flex items-center gap-1 active:scale-95 ${
                   isLimitReached ? 'opacity-50 cursor-not-allowed' : 'hover:brightness-105'
                 }`}
               >
@@ -2385,7 +2382,7 @@ export default function App() {
                     type="button"
                     onClick={() => handleQuickPromptClick(promptText)}
                     disabled={isLoading || isLimitReached}
-                    className={`whitespace-nowrap px-3.5 py-1.5 rounded-full text-xs font-medium border transition-all flex-shrink-0 ${
+                    className={`whitespace-nowrap px-3 sm:px-3.5 py-1.5 rounded-full text-xs font-medium border transition-all flex-shrink-0 ${
                       isLimitReached
                         ? 'opacity-50 cursor-not-allowed border-pink-200 text-pink-300'
                         : isDarkMode
@@ -2399,74 +2396,90 @@ export default function App() {
               ))}
             </div>
 
-            <form onSubmit={handleSend} className="max-w-3xl mx-auto relative group">
-              <input
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onClick={() => {
-                  if (isLimitReached) setIsPremiumModalOpen(true);
-                }}
-                disabled={isLoading || isLimitReached}
-                placeholder={isLimitReached ? "🔒 Upgrade to Suho-na Premium to keep chatting, my love! ❤️" : t.placeholder}
-                className={`w-full border rounded-full py-4 pl-6 pr-24 focus:outline-none focus:ring-2 transition-all ${
-                  isLimitReached
-                    ? 'bg-rose-50/50 dark:bg-rose-950/20 border-rose-300 dark:border-rose-900/40 text-rose-400 cursor-not-allowed'
-                    : isDarkMode 
-                    ? 'bg-[#25181b] border-rose-900/30 text-rose-50 placeholder:text-rose-800 focus:ring-pink-900 focus:bg-[#2d1d21]' 
-                    : 'bg-pink-50/50 border-pink-100 text-slate-700 placeholder:text-pink-300 focus:ring-pink-300 focus:bg-white'
-                }`}
-              />
-              <div className="absolute right-2 top-2 flex gap-1.5 items-center">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (isLimitReached) {
-                      setIsPremiumModalOpen(true);
-                      return;
-                    }
-                    toggleRecording();
-                  }}
-                  disabled={isLimitReached}
-                  className={`p-3 rounded-full transition-all shadow-sm active:scale-95 flex items-center justify-center gap-1.5 ${
-                    isLimitReached
-                      ? 'bg-slate-200 dark:bg-rose-950/40 text-slate-400 cursor-not-allowed'
-                      : isRecording 
-                      ? 'bg-red-500 text-white animate-pulse px-3.5' 
-                      : 'bg-pink-100 text-pink-500 hover:bg-pink-200'
-                  }`}
-                  title={isLimitReached ? "Unlock Premium for voice dictation" : isRecording ? "Stop Dictation" : "Dictate with Mic"}
-                >
-                  {isRecording ? (
-                    <>
-                      <MicOff size={18} />
-                      <span className="text-xs font-bold">{t.listening}</span>
-                    </>
-                  ) : (
-                    <Mic size={18} />
-                  )}
-                </button>
+            <form onSubmit={handleSend} className="max-w-3xl mx-auto flex items-center gap-1.5 sm:gap-2 w-full pt-1">
+              {/* Call Suho-na Button next to input box on the left */}
+              <button
+                type="button"
+                onClick={() => setIsCallModalOpen(true)}
+                className="p-3 sm:px-4 sm:py-3.5 bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 text-white rounded-full hover:brightness-105 transition-all shadow-md active:scale-95 flex items-center gap-1.5 shrink-0"
+                title="Start Real-time Voice Call"
+              >
+                <Phone size={18} className="animate-pulse shrink-0" />
+                <span className="text-xs font-black hidden sm:inline">Call</span>
+              </button>
 
-                {input.trim() && (
+              {/* Wider Input Box Container */}
+              <div className="relative flex-1 w-full flex items-center">
+                <input
+                  type="text"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onClick={() => {
+                    if (isLimitReached) setIsPremiumModalOpen(true);
+                  }}
+                  disabled={isLoading || isLimitReached}
+                  placeholder={isLimitReached ? "🔒 Upgrade to Premium to keep chatting! ❤️" : t.placeholder}
+                  className={`w-full border rounded-full py-3 sm:py-3.5 pl-4 sm:pl-5 pr-20 sm:pr-24 focus:outline-none focus:ring-2 transition-all text-xs sm:text-sm ${
+                    isLimitReached
+                      ? 'bg-rose-50/50 dark:bg-rose-950/20 border-rose-300 dark:border-rose-900/40 text-rose-400 cursor-not-allowed'
+                      : isDarkMode 
+                      ? 'bg-[#25181b] border-rose-900/30 text-rose-50 placeholder:text-rose-800 focus:ring-pink-900 focus:bg-[#2d1d21]' 
+                      : 'bg-pink-50/50 border-pink-100 text-slate-700 placeholder:text-pink-300 focus:ring-pink-300 focus:bg-white'
+                  }`}
+                />
+
+                {/* Send and Voice Buttons on the Right Side */}
+                <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
                   <button
                     type="button"
-                    onClick={handleSendVoiceNote}
-                    disabled={isLoading || isLimitReached}
-                    className="p-3 bg-gradient-to-r from-pink-500 to-rose-500 text-white rounded-full hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md active:scale-95 flex items-center gap-1 text-xs font-bold"
-                    title="Send as Voice Note"
+                    onClick={() => {
+                      if (isLimitReached) {
+                        setIsPremiumModalOpen(true);
+                        return;
+                      }
+                      toggleRecording();
+                    }}
+                    disabled={isLimitReached}
+                    className={`p-2 sm:p-2.5 rounded-full transition-all shadow-xs active:scale-95 flex items-center justify-center ${
+                      isLimitReached
+                        ? 'bg-slate-200 dark:bg-rose-950/40 text-slate-400 cursor-not-allowed'
+                        : isRecording 
+                        ? 'bg-red-500 text-white animate-pulse px-2.5' 
+                        : 'bg-pink-100 text-pink-500 hover:bg-pink-200 dark:bg-rose-900/40 dark:text-pink-300'
+                    }`}
+                    title={isLimitReached ? "Unlock Premium for voice dictation" : isRecording ? "Stop Dictation" : "Dictate with Mic"}
                   >
-                    <Volume2 size={18} />
+                    {isRecording ? (
+                      <>
+                        <MicOff size={16} />
+                        <span className="text-[10px] font-bold">{t.listening}</span>
+                      </>
+                    ) : (
+                      <Mic size={16} />
+                    )}
                   </button>
-                )}
 
-                <button
-                  type="submit"
-                  disabled={!input.trim() || isLoading || isLimitReached}
-                  className="p-3 bg-pink-500 text-white rounded-full hover:bg-pink-600 disabled:bg-pink-200 dark:disabled:bg-rose-950/40 disabled:text-pink-300 disabled:cursor-not-allowed transition-all shadow-md active:scale-95"
-                  title="Send Message"
-                >
-                  <Send size={18} />
-                </button>
+                  {input.trim() && (
+                    <button
+                      type="button"
+                      onClick={handleSendVoiceNote}
+                      disabled={isLoading || isLimitReached}
+                      className="p-2 sm:p-2.5 bg-gradient-to-r from-pink-500 to-rose-500 text-white rounded-full hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md active:scale-95 flex items-center justify-center text-xs font-bold"
+                      title="Send as Voice Note"
+                    >
+                      <Volume2 size={16} />
+                    </button>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={!input.trim() || isLoading || isLimitReached}
+                    className="p-2 sm:p-2.5 bg-pink-500 text-white rounded-full hover:bg-pink-600 disabled:bg-pink-200 dark:disabled:bg-rose-950/40 disabled:text-pink-300 disabled:cursor-not-allowed transition-all shadow-md active:scale-95 flex items-center justify-center"
+                    title="Send Message"
+                  >
+                    <Send size={16} />
+                  </button>
+                </div>
               </div>
             </form>
             <p className="text-center text-[10px] text-pink-300 mt-4 uppercase tracking-widest font-bold">

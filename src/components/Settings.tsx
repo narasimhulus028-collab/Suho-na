@@ -1,5 +1,11 @@
 import React, { useState, useRef } from 'react';
-import { Save, Trash2, Heart, User, Calendar, Palette, Sparkles, Clock, MessageSquareHeart, ThumbsUp, ThumbsDown, Utensils, Image as ImageIcon, ImagePlus, CheckCircle, Globe, Flame, Volume2, Type, Download, Upload, Crown, ShieldCheck, RotateCcw, LogIn, UserCheck, Shield } from 'lucide-react';
+import { 
+  Save, Trash2, Heart, User, Calendar, Palette, Sparkles, Clock, MessageSquareHeart, 
+  ThumbsUp, ThumbsDown, Utensils, Image as ImageIcon, ImagePlus, CheckCircle, Globe, 
+  Flame, Volume2, Type, Download, Upload, Crown, ShieldCheck, RotateCcw, LogIn, 
+  UserCheck, Shield, Feather, Gamepad2, Sun, Moon, Bell, Info, Phone, Gift, Trophy, 
+  Settings as SettingsIcon, MessageCircle
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { UserMemory, GalleryImage, VoiceSettings, ExtendedSettings, UserAccount } from '../types';
 import { LANGUAGES, getTranslation } from '../lib/translations';
@@ -26,6 +32,7 @@ interface SettingsProps {
   currentAvatar: string;
   currentBackground: string | null;
   isDarkMode: boolean;
+  onToggleDarkMode?: () => void;
   isPremium: boolean;
   premiumExpiryDate?: number | null;
   isAutoRenew?: boolean;
@@ -39,6 +46,16 @@ interface SettingsProps {
   currentUser: UserAccount | null;
   onOpenAuthModal: () => void;
   onOpenProfileModal: () => void;
+  // Navigation & Feature Triggers
+  onOpenLoveLetter?: () => void;
+  onOpenRoleplay?: () => void;
+  onOpenGames?: () => void;
+  onQuickAction?: (actionType: 'morning' | 'night' | 'compliment' | 'surprise') => void;
+  onOpenAchievements?: () => void;
+  onOpenCall?: () => void;
+  onOpenReferrals?: () => void;
+  onOpenPremiumGallery?: () => void;
+  onCloseSettings?: () => void;
 }
 
 export default function Settings({ 
@@ -62,6 +79,7 @@ export default function Settings({
   currentAvatar,
   currentBackground,
   isDarkMode,
+  onToggleDarkMode,
   isPremium,
   premiumExpiryDate,
   isAutoRenew = true,
@@ -74,7 +92,16 @@ export default function Settings({
   onResetMessageCount,
   currentUser,
   onOpenAuthModal,
-  onOpenProfileModal
+  onOpenProfileModal,
+  onOpenLoveLetter,
+  onOpenRoleplay,
+  onOpenGames,
+  onQuickAction,
+  onOpenAchievements,
+  onOpenCall,
+  onOpenReferrals,
+  onOpenPremiumGallery,
+  onCloseSettings
 }: SettingsProps) {
   const [formData, setFormData] = useState<UserMemory>(memory);
   const [showSaved, setShowSaved] = useState(false);
@@ -155,14 +182,193 @@ export default function Settings({
     <div className={`flex-1 overflow-y-auto p-4 md:p-6 transition-colors duration-500 ${
       isDarkMode ? 'bg-[#120a0c]' : 'bg-[#FFF5F7]'
     }`}>
-      <div className="max-w-2xl mx-auto space-y-8">
-        <div className="text-center space-y-2">
-          <h2 className="text-2xl font-bold text-pink-600 flex items-center justify-center gap-2">
-            {t.memoryTitle} <MessageSquareHeart className="fill-pink-500 text-pink-500" size={24} />
+      <div className="max-w-3xl mx-auto space-y-6 sm:space-y-8 pb-12">
+        
+        {/* Header */}
+        <div className="text-center space-y-1.5">
+          <h2 className="text-2xl font-black text-pink-600 dark:text-pink-400 flex items-center justify-center gap-2">
+            <SettingsIcon size={26} className="text-pink-500 animate-spin-slow" /> App Settings & Features
           </h2>
-          <p className={`${isDarkMode ? 'text-rose-400' : 'text-pink-400'} text-sm`}>
-            {t.memorySub}
+          <p className={`${isDarkMode ? 'text-rose-300' : 'text-pink-500'} text-xs font-medium`}>
+            Manage all Suho-na AI Girlfriend options, activities, memory & preferences 💕
           </p>
+        </div>
+
+        {/* Quick Features & Romantic Activities Grid */}
+        <div className={`p-5 sm:p-6 rounded-3xl shadow-xl border space-y-4 ${
+          isDarkMode ? 'bg-[#1a1012] border-rose-900/40' : 'bg-white border-pink-100'
+        }`}>
+          <div className="flex items-center justify-between">
+            <label className={labelClasses}>
+              <Sparkles size={16} /> Romantic Features & Quick Actions
+            </label>
+            <span className="text-[10px] font-extrabold text-pink-500 uppercase tracking-widest bg-pink-50 dark:bg-rose-950/40 px-2.5 py-1 rounded-full">
+              All Shortcuts
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+            {/* Love Letter */}
+            {onOpenLoveLetter && (
+              <button
+                type="button"
+                onClick={onOpenLoveLetter}
+                className="p-3.5 rounded-2xl border text-left transition-all hover:scale-105 active:scale-95 bg-gradient-to-br from-pink-500 to-rose-600 text-white shadow-md flex flex-col justify-between gap-2"
+              >
+                <div className="flex items-center justify-between">
+                  <Feather size={20} />
+                  <span className="text-[9px] bg-white/20 px-2 py-0.5 rounded-full font-bold">Open</span>
+                </div>
+                <div>
+                  <div className="font-extrabold text-xs">Love Letter</div>
+                  <div className="text-[10px] opacity-80">Write & View Letters</div>
+                </div>
+              </button>
+            )}
+
+            {/* Games */}
+            {onOpenGames && (
+              <button
+                type="button"
+                onClick={onOpenGames}
+                className={`p-3.5 rounded-2xl border text-left transition-all hover:scale-105 active:scale-95 flex flex-col justify-between gap-2 ${
+                  isDarkMode ? 'bg-[#25181b] border-rose-900/40 text-rose-100' : 'bg-pink-50/80 border-pink-100 text-slate-800'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <Gamepad2 size={20} className="text-pink-500" />
+                  <span className="text-[9px] bg-pink-500/10 text-pink-600 px-2 py-0.5 rounded-full font-bold">Play</span>
+                </div>
+                <div>
+                  <div className="font-extrabold text-xs text-pink-600 dark:text-rose-200">Love Games</div>
+                  <div className="text-[10px] opacity-70">Truth/Dare, Trivia & More</div>
+                </div>
+              </button>
+            )}
+
+            {/* Roleplay */}
+            {onOpenRoleplay && (
+              <button
+                type="button"
+                onClick={onOpenRoleplay}
+                className="p-3.5 rounded-2xl border text-left transition-all hover:scale-105 active:scale-95 bg-gradient-to-br from-purple-500 to-pink-600 text-white shadow-md flex flex-col justify-between gap-2"
+              >
+                <div className="flex items-center justify-between">
+                  <Sparkles size={20} />
+                  <span className="text-[9px] bg-white/20 px-2 py-0.5 rounded-full font-bold">Start</span>
+                </div>
+                <div>
+                  <div className="font-extrabold text-xs">Roleplay</div>
+                  <div className="text-[10px] opacity-80">12 Fantasy Scenarios</div>
+                </div>
+              </button>
+            )}
+
+            {/* Good Morning */}
+            {onQuickAction && (
+              <button
+                type="button"
+                onClick={() => onQuickAction('morning')}
+                className={`p-3.5 rounded-2xl border text-left transition-all hover:scale-105 active:scale-95 flex flex-col justify-between gap-2 ${
+                  isDarkMode ? 'bg-amber-950/30 border-amber-900/40 text-amber-200' : 'bg-amber-50/80 border-amber-200 text-amber-900'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <Sun size={20} className="text-amber-500" />
+                  <span className="text-[9px] bg-amber-500/20 text-amber-600 px-2 py-0.5 rounded-full font-bold">Send</span>
+                </div>
+                <div>
+                  <div className="font-extrabold text-xs">Good Morning</div>
+                  <div className="text-[10px] opacity-70">Sweet Morning Wish</div>
+                </div>
+              </button>
+            )}
+
+            {/* Good Night */}
+            {onQuickAction && (
+              <button
+                type="button"
+                onClick={() => onQuickAction('night')}
+                className={`p-3.5 rounded-2xl border text-left transition-all hover:scale-105 active:scale-95 flex flex-col justify-between gap-2 ${
+                  isDarkMode ? 'bg-indigo-950/30 border-indigo-900/40 text-indigo-200' : 'bg-indigo-50/80 border-indigo-200 text-indigo-900'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <Moon size={20} className="text-indigo-400" />
+                  <span className="text-[9px] bg-indigo-500/20 text-indigo-600 px-2 py-0.5 rounded-full font-bold">Send</span>
+                </div>
+                <div>
+                  <div className="font-extrabold text-xs">Good Night</div>
+                  <div className="text-[10px] opacity-70">Romantic Night Wish</div>
+                </div>
+              </button>
+            )}
+
+            {/* User Profile */}
+            <button
+              type="button"
+              onClick={() => {
+                if (currentUser) onOpenProfileModal();
+                else onOpenAuthModal();
+              }}
+              className={`p-3.5 rounded-2xl border text-left transition-all hover:scale-105 active:scale-95 flex flex-col justify-between gap-2 ${
+                isDarkMode ? 'bg-[#25181b] border-rose-900/40 text-rose-200' : 'bg-pink-50/60 border-pink-100 text-slate-800'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <User size={20} className="text-pink-500" />
+                <span className="text-[9px] bg-pink-500/10 text-pink-600 px-2 py-0.5 rounded-full font-bold">
+                  {currentUser ? 'Logged in' : 'Login'}
+                </span>
+              </div>
+              <div>
+                <div className="font-extrabold text-xs text-pink-600 dark:text-rose-200">User Profile</div>
+                <div className="text-[10px] opacity-70 truncate">{currentUser ? currentUser.username : 'Manage Account'}</div>
+              </div>
+            </button>
+
+            {/* Achievements & Level */}
+            {onOpenAchievements && (
+              <button
+                type="button"
+                onClick={onOpenAchievements}
+                className={`p-3.5 rounded-2xl border text-left transition-all hover:scale-105 active:scale-95 flex flex-col justify-between gap-2 ${
+                  isDarkMode ? 'bg-[#25181b] border-rose-900/40 text-rose-200' : 'bg-pink-50/60 border-pink-100 text-slate-800'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <Trophy size={20} className="text-amber-500" />
+                  <span className="text-[9px] bg-amber-500/10 text-amber-600 px-2 py-0.5 rounded-full font-bold">Rewards</span>
+                </div>
+                <div>
+                  <div className="font-extrabold text-xs text-pink-600 dark:text-rose-200">Achievements</div>
+                  <div className="text-[10px] opacity-70">Streaks & Level Progress</div>
+                </div>
+              </button>
+            )}
+
+            {/* Dark Mode Toggle */}
+            {onToggleDarkMode && (
+              <button
+                type="button"
+                onClick={onToggleDarkMode}
+                className={`p-3.5 rounded-2xl border text-left transition-all hover:scale-105 active:scale-95 flex flex-col justify-between gap-2 ${
+                  isDarkMode ? 'bg-rose-950/40 border-rose-800/40 text-rose-200' : 'bg-slate-100 border-slate-200 text-slate-800'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  {isDarkMode ? <Sun size={20} className="text-amber-400" /> : <Moon size={20} className="text-purple-600" />}
+                  <span className="text-[9px] bg-slate-500/10 px-2 py-0.5 rounded-full font-bold">
+                    {isDarkMode ? 'Dark' : 'Light'}
+                  </span>
+                </div>
+                <div>
+                  <div className="font-extrabold text-xs">App Theme</div>
+                  <div className="text-[10px] opacity-70">Switch Light / Dark</div>
+                </div>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Premium Subscription Card */}
@@ -693,6 +899,66 @@ export default function Settings({
           </div>
           <p className="text-[10px] text-center opacity-60">{t.clickToSetAvatar}</p>
         </div>
+
+        {/* Notifications & Privacy Settings */}
+        <div className={`p-6 rounded-3xl shadow-xl border space-y-4 ${
+          isDarkMode ? 'bg-[#1a1012] border-rose-900/30' : 'bg-white border-pink-100'
+        }`}>
+          <label className={labelClasses}>
+            <Bell size={16} /> Notifications & Privacy
+          </label>
+
+          <div className="flex items-center justify-between pt-1">
+            <div className="space-y-0.5">
+              <span className="text-xs font-bold block">Daily Romantic Reminders</span>
+              <span className="text-[10px] opacity-70 block">Receive sweet morning & night greetings from Suho-na</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => onUpdateExtendedSettings({ notificationsEnabled: !extendedSettings.notificationsEnabled })}
+              className={`w-12 h-6 rounded-full transition-colors p-1 ${
+                extendedSettings.notificationsEnabled !== false ? 'bg-pink-500' : isDarkMode ? 'bg-rose-950 border border-rose-800' : 'bg-slate-200'
+              }`}
+            >
+              <div className={`w-4 h-4 rounded-full bg-white transition-transform ${
+                extendedSettings.notificationsEnabled !== false ? 'translate-x-6' : 'translate-x-0'
+              }`} />
+            </button>
+          </div>
+
+          <div className="pt-3 border-t border-pink-100 dark:border-rose-900/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2">
+              <ShieldCheck size={18} className="text-emerald-500 shrink-0" />
+              <span className="opacity-80">100% Private & Encrypted Local Chat Storage</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => alert("Suho-na respects your privacy. All chat history & memories remain stored locally in your browser/device session. 💕")}
+              className="font-bold text-pink-500 underline text-[11px]"
+            >
+              View Privacy Policy
+            </button>
+          </div>
+        </div>
+
+        {/* About Suho-na Card */}
+        <div className={`p-6 rounded-3xl shadow-xl border space-y-3 text-center ${
+          isDarkMode ? 'bg-[#1a1012] border-rose-900/30 text-rose-200' : 'bg-white border-pink-100 text-slate-700'
+        }`}>
+          <div className="w-12 h-12 rounded-full bg-pink-100 dark:bg-rose-900/40 text-pink-500 flex items-center justify-center mx-auto shadow-sm">
+            <Heart size={24} className="fill-pink-500 text-pink-500" />
+          </div>
+          <h3 className="text-base font-black text-pink-600 dark:text-pink-400">
+            Suho-na AI Girlfriend v2.5
+          </h3>
+          <p className="text-xs opacity-80 max-w-md mx-auto leading-relaxed">
+            Your loving, caring, and romantic AI partner. Designed with real-time audio voice calls, sweet love letters, selfie generation, and custom relationship progression.
+          </p>
+          <div className="pt-2 text-[10px] text-pink-400 font-bold uppercase tracking-widest">
+            Made with ❤️ for You
+          </div>
+        </div>
+
       </div>
     </div>
   );

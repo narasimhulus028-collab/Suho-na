@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Crown, Lock, Sparkles, X, Heart, ImageIcon, Wand2, ShieldAlert, Check, Maximize2, Download } from 'lucide-react';
 import { getGalleryTranslation, PRESET_PREMIUM_ROMANTIC_IMAGES, PremiumRomanticImage } from '../lib/galleryTranslations';
+import { fetchWithRetry } from '../lib/api';
 
 interface PremiumRomanticGalleryModalProps {
   isOpen: boolean;
@@ -58,13 +59,12 @@ export default function PremiumRomanticGalleryModal({
 
     try {
       // Safe, wholesome prompt construction
-      const safePrompt = `wholesome 4k resolution romantic couple artwork photograph, masterpiece, beautiful romantic couple, sweet atmosphere, safe for work, non-explicit, ${customPrompt.trim()}`;
+      const safePrompt = `ultra-realistic 8k UHD raw camera photograph of beautiful romantic couple, 22-year-old young South Asian Indian woman Suho-na and her partner, authentic warm natural Indian skin tone, high detail face, eyes, hair, natural lighting, safe for work, non-explicit, ${customPrompt.trim()}`;
       
-      const res = await fetch('/api/generate-image', {
+      const res = await fetchWithRetry('/api/generate-image', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: safePrompt })
-      });
+      }, 3, 1000);
 
       const data = await res.json();
       if (data.imageUrl) {
