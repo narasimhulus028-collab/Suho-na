@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Suho-na</string>
+    <string name="title_activity_main">Suho-na</string>
+    <string name="package_name">com.suhona.ai.app</string>
+    <string name="custom_url_scheme">com.suhona.ai.app</string>
+</resources>
