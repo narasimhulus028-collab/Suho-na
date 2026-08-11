@@ -1445,8 +1445,7 @@ export default function App() {
           imageUrl: undefined,
           imageGenerated: false
         };         }
-const userAskedPhoto = /\b(photo|selfie|picture|pic|image|foto|dekhao|bhej|send|ఫోటో|సెల్ఫీ|పిక్చర్|పిక్|ఇమేజ్|పంపు|పంప|చూపించు|చూపు)\b/i.test(lastUserMsg?.content || "");
-
+const userAskedPhoto = /photo|selfie|picture|pic|image|foto|dekhao|bhej|send|ఫోటో|సెల్ఫీ|పిక్చర్|పిక్|ఇమేజ్|పంపు|పంప|చూపించు|చూపు/i.test(lastUserMsg?.content || "");
 
       if (data.imageGenerated || data.imageUrl) {
         incrementDailyPhotoCount();

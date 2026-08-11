@@ -1055,7 +1055,7 @@ CRITICAL EXECUTION MANDATE FOR GEMINI:
           });
 
           // 6-second timeout per candidate model call
-          const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 15000));
+          const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 6000));
           const response: any = await Promise.race([genPromise, timeoutPromise]);
 
           if (response && response.text) {
@@ -1063,7 +1063,7 @@ CRITICAL EXECUTION MANDATE FOR GEMINI:
             break;
           }
         } catch (err: any) {
-console.error(`Gemini call error on model ${modelName}:`, err?.message || err);
+          console.error(`Gemini call error on model ${modelName}:`, err?.message || err);
           // If error (including 429 quota), move immediately to next candidate model
           continue;
         }

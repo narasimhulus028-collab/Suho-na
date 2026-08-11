@@ -150,7 +150,7 @@ function isMultilingualPhotoRequest(text: string): boolean {
     'foto', 'gambar', 'tunjukkan', 'kirim foto'
   ];
 
-  return photoKeywords.some(kw => lower.includes(kw));
+  return photoKeywords.some(kw => lower.includes(kw)) || /ఫోటో|సెల్ఫీ|పిక్|చిత్రం|ఇమేజ్|పంపు|పంపించు|చూపు|చూపించు/.test(text);
 }
 
 /**
