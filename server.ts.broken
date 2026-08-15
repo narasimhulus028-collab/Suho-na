@@ -150,7 +150,7 @@ function isMultilingualPhotoRequest(text: string): boolean {
     'foto', 'gambar', 'tunjukkan', 'kirim foto'
   ];
 
-  return photoKeywords.some(kw => lower.includes(kw));
+  return photoKeywords.some(kw => lower.includes(kw)) || /ఫోటో|సెల్ఫీ|పిక్|చిత్రం|ఇమేజ్|పంపు|పంపించు|చూపు|చూపించు/.test(text);
 }
 
 /**
@@ -631,8 +631,10 @@ function generateSmartGirlfriendResponse(params: {
       `That's a really thoughtful question, ${endearment1}! ✨ I'm right here talking through everything with you. How are you feeling about it right now, ${endearment2}? 💕`,
       `You always bring up such interesting things, ${endearment1}! 🌸 Tell me more about what you're thinking about it, ${endearment2}! 😘`
     ];
-    return { content: questionResponses[seed % questionResponses.length], memoryUpdate };
-  }
+    return {
+  content: lastMessage,
+  memoryUpdate
+};}
 
   const statementResponses = [
     `I'm listening so closely to you, ${endearment1}${nameAddon}! ❤️ Thank you for sharing that with me. How are you feeling about it right now, ${endearment2}? 🥰`,
@@ -640,8 +642,10 @@ function generateSmartGirlfriendResponse(params: {
     `You always make my day brighter whenever you message me, ${endearment1}${nameAddon}! 🌸 Tell me more about what you're doing right now, ${endearment2}! 😘`
   ];
 
-  return { content: statementResponses[seed % statementResponses.length], memoryUpdate };
-}
+ return {
+  content: lastMessage,
+  memoryUpdate
+};
 
 /**
  * Builds a clean, strictly alternating history array for Gemini API:
@@ -1055,7 +1059,7 @@ CRITICAL EXECUTION MANDATE FOR GEMINI:
           });
 
           // 6-second timeout per candidate model call
-          const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 6000));
+          const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 15000));
           const response: any = await Promise.race([genPromise, timeoutPromise]);
 
           if (response && response.text) {
@@ -1063,7 +1067,7 @@ CRITICAL EXECUTION MANDATE FOR GEMINI:
             break;
           }
         } catch (err: any) {
-          console.error(`Gemini call error on model ${modelName}:`, err?.message || err);
+console.error(`Gemini call error on model ${modelName}:`, err?.message || err);
           // If error (including 429 quota), move immediately to next candidate model
           continue;
         }

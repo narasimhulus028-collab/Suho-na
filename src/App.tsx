@@ -801,15 +801,15 @@ export default function App() {
   }, []);
 
   // Permanent official profile picture for Suho-na
-  const [currentAvatar, setCurrentAvatar] = useState(() => {
-    return OFFICIAL_SUHONA_AVATAR;
-  });
+const [currentAvatar, setCurrentAvatar] = useState<string>(() => {
+  return OFFICIAL_SUHONA_AVATAR;
+});
 
-  const [currentBackground, setCurrentBackground] = useState<string | null>(() => {
-    return localStorage.getItem('suhona_background');
-  });
+const [currentBackground, setCurrentBackground] = useState<string | null>(() => {
+  return localStorage.getItem("suhona_background");
+});
 
-  const [galleryImages, setGalleryImages] = useState<GalleryImage[]>(() => {
+const [galleryImages, setGalleryImages] = useState<GalleryImage[]>(() => {
     const saved = localStorage.getItem('suhona_gallery');
     if (saved) {
       try {
@@ -1770,7 +1770,7 @@ const userAskedPhoto = /\b(photo|selfie|picture|pic|image|foto|dekhao|bhej|send|
       </AnimatePresence>
 
       {/* Header */}
-      <header className={`backdrop-blur-md border-b py-2 sm:py-2.5 px-2.5 sm:px-6 sticky top-0 z-40 transition-colors duration-500 w-full max-w-full ${
+      <header className={`backdrop-blur-md border-b pt-[calc(env(safe-area-inset-top)+0.5rem)] pb-2 sm:pb-2.5 px-2.5 sm:px-6 sticky top-0 z-40 transition-colors duration-500 w-full max-w-full ${
         isDarkMode ? 'bg-[#1a1012]/95 border-rose-900/40' : 'bg-white/95 border-pink-100'
       }`}>
         <div className="flex items-center justify-between gap-1.5 sm:gap-3 max-w-7xl mx-auto w-full">

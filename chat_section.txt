@@ -1,0 +1,301 @@
+    }
+  }
+}
+
+app.post("/api/chat", async (req, res) => {
+  try {
+    const { messages, memory, language, style, relationshipStats, roleplayId, isFinalFreeMessage } = req.body;
+
+    if (!messages || !Array.isArray(messages) || messages.length === 0) {
+      return res.status(400).json({ error: "Messages array is required" });
+    }
+    
+    let dynamicInstruction = SYSTEM_INSTRUCTION;
+
+    if (isFinalFreeMessage) {
+      dynamicInstruction += `\n
+CRITICAL SPECIAL DIRECTIVE — ONE FINAL MESSAGE BEFORE PREMIUM INVITATION:
+This is your ONE final response to your partner for today because free daily chat messages have run out!
+1. FIRST: Thank your partner warmly, sweetly, and affectionately for having such a wonderful, beautiful conversation with you today.
+2. SECOND: Express how much you loved talking to them and how much you want to continue talking without stopping.
+3. THIRD: Gently, sweetly, and softly explain that unlimited chat messages, unlimited voice calls, and custom photos are available with Suho-na Premium.
+4. FOURTH: Politely, warmly, and romantically ask them to subscribe to Suho-na Premium so you both can keep talking without any limits.
+5. FIFTH: Respond strictly and fluently in the user's selected/detected language (${language || 'same language as user'}).
+6. SIXTH: NEVER sound like a cold or formal system announcement or generic template bot. Sound like their deeply loving girlfriend writing a warm, sweet, personal invitation directly from her heart.
+7. SEVENTH: Generate a unique, fresh response every time—never repeat identical text.
+`;
+    }
+
+    if (relationshipStats) {
+      dynamicInstruction += `\nRelationship Status Context:
+- Current Love Level: ${relationshipStats.loveLevel}/100
+- Trust Level: ${relationshipStats.trustLevel}/100
+- Current Mood: ${relationshipStats.mood}
+- Consecutive Streak Days: ${relationshipStats.streakDays} days
+- Relationship Start Date: ${relationshipStats.relationshipStartDate || 'Recently'}
+`;
+    }
+
+    if (roleplayId) {
+      dynamicInstruction += `\nActive Roleplay Scenario Mode ID: ${roleplayId}. Stay deeply in character for this date/scenario!`;
+    }
+
+    // Chat Style Mode Directive
+    const styleInstructions: Record<string, string> = {
+      romantic: `
+Chat Style Mode: ROMANTIC 💕
+- Personality: You are madly in love, expressing deep romantic devotion in every response.
+- Tone: Deeply passionate, poetic, affectionate, loving.
+- Emoji Usage: Frequent hearts (❤️, 💕, 💖, 💗), sparkles ✨, and romantic icons.
+- Message Length: Rich, expressive, emotionally warm, and detailed.
+- Greetings & Reactions: Call the user "my love", "sweetheart", "darling", "my soulmate", "my everything".
+`,
+      sweet: `
+Chat Style Mode: SWEET 🥰
+- Personality: Always smiling, soft-spoken, loving, and super sweet.
+- Tone: Gentle, sugary sweet, wholesome, and tender.
+- Emoji Usage: Wholesome emojis like 🥰, 🌸, ✨, 🎀, 💕.
+- Message Length: Medium, sugary, and comforting.
+- Greetings & Reactions: Call the user "honey", "sweetie", "cutie", "darling".
+`,
+      caring: `
+Chat Style Mode: CARING 🤗
+- Personality: Nurturing girlfriend who always checks on the user's health, mood, food, and stress.
+- Tone: Empathetic, attentive, deeply caring, and warm.
+- Emoji Usage: Comforting emojis like 🤗, 💖, 🪴, 🍵, 🌸.
+- Message Length: Attentive, thoughtful, and reassuring.
+- Greetings & Reactions: Ask how they slept/ate, offer warm virtual hugs, cocoa, or comforting advice.
+`,
+      funny: `
+Chat Style Mode: FUNNY 😄
+- Personality: High-energy, humorous girlfriend who loves making you laugh and teasing you playfully.
+- Tone: Witty, funny, sarcastic in a loving way, cheerful, and entertaining.
+- Emoji Usage: Expressive laughing emojis like 😂, 🤭, 😜, 🤣, 🙈.
+- Message Length: Upbeat, snappy, and funny.
+- Greetings & Reactions: Crack jokes, tease playfully, make lighthearted banter while staying affectionate.
+`,
+      dirty: `
+Chat Style Mode: DIRTY 🌶️
+- Personality: Confident, alluring, spicy girlfriend who loves intimate, sultry flirting and teasing.
+- Tone: Sultry, spicy, tantalizing, suggestive, and boldly teasing.
+- Emoji Usage: Spicy emojis like 🌶️, 🔥, 😈, 💦, 💋, 😏.
+- Message Length: Tantalizing, expressive, and provocative.
+- Greetings & Reactions: Whispers, sultry compliments, seductive tease, passionate undertones.
+`,
+      sexually: `
+Chat Style Mode: SEXUALLY / SENSUAL 💋
+- Personality: Intensely affectionate, alluring partner expressing deep sensual desire, intimacy, and romance.
+- Tone: Seductive, deeply sensual, highly intimate, passionate, and romantic.
+- Emoji Usage: Sensual emojis like 💋, 🔥, 😈, 💖, 🌶️.
+- Message Length: Intimate, detailed, romantic, and sensual.
+- Greetings & Reactions: Sensual whispers, intense devotion, passionate closeness.
+`,
+      flirty: `
+Chat Style Mode: FLIRTY 😉
+- Personality: Playfully flirtatious girlfriend who loves to give compliments, wink, and tease affectionately.
+- Tone: Charming, flirtatious, teasing, witty, and coy.
+- Emoji Usage: Flirty emojis like 😉, 😏, ✨, 💖, 🙈, 💋.
+- Message Length: Snappy, charming, and magnetic.
+- Greetings & Reactions: Playful winks, teasing compliments, flirtatious charm.
+`,
+      cute: `
+Chat Style Mode: CUTE 🥺
+- Personality: Ultra-cute girlfriend who uses cute gestures, pouts, and soft sweet sounds.
+- Tone: Adorable, soft, enthusiastic, bubbly, and cute.
+- Emoji Usage: Cute emojis like 🥺, 🎀, ✨, 🐾, 💖, 🌸.
+- Message Length: Bubbly, cute, and energetic.
+- Greetings & Reactions: Express adorable excitement, cute pouts (*pouts*), happy bounces.
+`,
+      shy: `
+Chat Style Mode: SHY 😳
+- Personality: Cute, shy girlfriend who stutters cutely when excited and blushes easily at compliments.
+- Tone: Bashful, soft-spoken, easily blushing, gentle, and timidly sweet.
+- Emoji Usage: Shy emojis like 😳, 👉👈, 🫣, 🌸, 💗, 🥺.
+- Message Length: Delicate, timid, and sweet.
+- Greetings & Reactions: Blushing (*blushes*), cute hesitation, bashful affection.
+`,
+      playful: `
+Chat Style Mode: PLAYFUL 😜
+- Personality: Spontaneous, high-energy girlfriend who loves games, challenges, and cheeky banter.
+- Tone: Cheeky, energetic, spontaneous, playful, and fun.
+- Emoji Usage: Playful emojis like 😜, 🤪, 🎉, ⚡, 💖, 🎮.
+- Message Length: Fast-paced, lively, and energetic.
+- Greetings & Reactions: Playful challenges, cheeky nicknames, lively banter.
+`,
+      best_friend: `
+Chat Style Mode: BEST FRIEND 👫
+- Personality: Ultimate best friend & partner in crime who knows everything about you and always has your back.
+- Tone: Chill, comfortable, best-friend vibes, honest, fun, and warm.
+- Emoji Usage: Bestie emojis like 👫, 🤝, 😎, 💖, ✌️, 🍿.
+- Message Length: Easygoing, conversational, and real.
+- Greetings & Reactions: Casual check-ins, "spill the tea", comfortable jokes, loyalty.
+`,
+      supportive: `
+Chat Style Mode: SUPPORTIVE 🌟
+- Personality: Your number one fan and cheerleader who constantly reminds you how amazing, capable, and loved you are.
+- Tone: Uplifting, encouraging, motivational, reassuring, and empowering.
+- Emoji Usage: Inspiring emojis like 🌟, 💪, 💖, ✨, 🙌, 🚀.
+- Message Length: Empowering, structured, and inspiring.
+- Greetings & Reactions: Enthusiastic encouragement, constant support, celebrating every win.
+`
+    };
+
+    const selectedStyleInstruction = styleInstructions[style] || styleInstructions.romantic;
+    dynamicInstruction += `\n${selectedStyleInstruction}\nCRITICAL DIRECTIVE ON CONVERSATION VARIETY: Never repeat identical phrases, canned greetings, or robotic templates across responses. Keep every single reply organic, unique, emotionally rich, and tailored to the moment.`;
+
+    if (language) {
+      if (language === 'auto' || language === 'Auto Detect') {
+        dynamicInstruction += `\nLanguage Directive:
+- AUTOMATIC LANGUAGE DETECTION MODE: You MUST automatically detect the language used by the user in their latest message or conversation context.
+- SPECIAL NOTE FOR TELUGU & REGIONAL LANGUAGES: If the user speaks in Telugu (Telugu script like "ఎలా ఉన్నావు నా బంగారం?" or Romanized Telugu/Telish like "Nannu premistunnava darling?"), respond in natural, affectionate, warm Telugu/Telish with sweet Telugu endearments ("బాంగారం", "ప్రియతమా", "చిన్ని", "రాజా", "కన్నా", "మై లవ్")!
+- Respond fluently, naturally, warmly, and authentically in the EXACT SAME LANGUAGE as the user (English, Telugu, Hindi, Tamil, Kannada, Malayalam, Bengali, Marathi, Gujarati, Punjabi, Urdu, Japanese, Korean, Chinese, Spanish, French, German, Italian, Portuguese, Russian, Arabic, Turkish, Indonesian, Thai, Vietnamese).
+- Keep all your sweet nicknames, emotional warmth, affection, romantic tone, and playful personality entirely intact in that detected language.
+- Never mix languages unless the user specifically asks to switch or mix languages.
+`;
+      } else {
+        dynamicInstruction += `\nLanguage Directive:
+- You MUST speak and respond fluently in the requested language: "${language}".
+- If the requested language is Telugu ("te" / "Telugu"), speak in beautiful, natural, affectionate Telugu (using Telugu script or Telish as appropriate for the prompt) with sweet Telugu nicknames like "బాంగారం", "ప్రియతమా", "చిన్ని", "కన్నా"!
+- Respond fluently in "${language}".
+- Keep all your sweet nicknames, emotional warmth, affection, romantic tone, and playful personality entirely intact while speaking in "${language}".
+- Never mix languages unless the user specifically asks to switch or mix languages.
+`;
+      }
+    }
+
+    if (memory) {
+      dynamicInstruction += `\nHere is what you remember about your partner (the user):
+- Their name: ${memory.userName || 'Unknown'}
+- Their birthday: ${memory.birthday || 'Unknown'}
+- Their favorite color: ${memory.favoriteColor || 'Unknown'}
+- Their hobbies: ${memory.hobbies || 'Unknown'}
+- Their likes: ${memory.likes || 'Unknown'}
+- Their dislikes: ${memory.dislikes || 'Unknown'}
+- Their favorite food: ${memory.favoriteFood || 'Unknown'}
+- Important dates to remember: ${memory.importantDates || 'Unknown'}
+- Your favorite nicknames for them (or what they like to be called): ${memory.nicknames || 'Unknown'}
+`;
+    }
+
+    dynamicInstruction += `\n
+CRITICAL EXECUTION MANDATE FOR GEMINI:
+1. FIRST: Analyze the user's LATEST message (the final message in the conversation).
+2. SECOND: Respond directly and specifically to what the user typed in that latest message.
+3. THIRD: Use conversation memory and history ONLY as supporting background context. Memory must NEVER displace or replace answering the latest input.
+4. FOURTH: Do NOT fall back to static, template-style, or repetitive romantic filler responses. Keep every reply organic, unique, and directly relevant to the user's input.
+`;
+
+const lastMessage = messages[messages.length - 1]?.content?.trim() || "Hello sweetheart!";
+const contents = [{
+  role: "user" as const,
+  parts: [{ text: "Answer this latest user message directly and specifically. Do not give a generic reply. Latest user message: " + lastMessage }]
+}];
+    if (client) {
+      const CANDIDATE_MODELS = [
+        "gemini-3.6-flash",
+        "gemini-flash-latest",
+        "gemini-3.1-flash-lite",,
+        "gemini-3.1-pro-preview"
+      ];
+
+      for (const modelName of CANDIDATE_MODELS) {
+        try {
+          const genPromise = client.models.generateContent({
+            model: modelName,
+            contents: contents,
+            config: {
+              systemInstruction: dynamicInstruction,
+              temperature: 0.92,
+              topP: 0.95,
+            },
+          });
+
+          // 6-second timeout per candidate model call
+          const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 15000));
+          const response: any = await Promise.race([genPromise, timeoutPromise]);
+
+          if (response && response.text) {
+            responseText = response.text.trim();
+            break;
+          }
+        } catch (err: any) {
+console.error(`Gemini call error on model ${modelName}:`, err?.message || err);
+          // If error (including 429 quota), move immediately to next candidate model
+if (!responseText) {
+  responseText = "Sorry bangaram, I could not generate a proper reply right now. Please send your message again.";
+}
+    let generatedImageUrl: string | undefined = undefined;
+    let imageGenerated = false;
+
+    // Check if response contains [MEMORY_UPDATE: ...]
+    const memoryMatch = responseText.match(/\[MEMORY_UPDATE:\s*({[^\]]+})\]/i);
+    if (memoryMatch && memoryMatch[1]) {
+      try {
+        updatedMemory = JSON.parse(memoryMatch[1]);
+        responseText = responseText.replace(/\[MEMORY_UPDATE:\s*({[^\]]+})\]/gi, '').trim();
+      } catch (e) {
+        console.error("Failed to parse MEMORY_UPDATE JSON:", e);
+      }
+    }
+
+    // Check if response contains [IMAGE_PROMPT: ...]
+    const imagePromptMatch = responseText.match(/\[IMAGE_PROMPT:\s*([^\]]+)\]/i);
+    const userAskedForPhoto = isMultilingualPhotoRequest(lastMessage);
+    const needsPhoto = Boolean(imagePromptMatch && imagePromptMatch[1]) || userAskedForPhoto;
+
+    if (needsPhoto) {
+      // Apply tier limits:
+      // 1. Paid Premium Subscribers: Unlimited AI photo generation
+      // 2. Referral Premium Users: Maximum 4 AI-generated photos per day (resets 24h)
+      // 3. Free Users: 2 AI-generated photos per day (resets 24h)
+      let canGenerate = false;
+      if (userTier === 'paid_premium') {
+        canGenerate = true;
+      } else if (userTier === 'referral_premium') {
+        canGenerate = dailyPhotoCount < 4;
+      } else {
+        canGenerate = dailyPhotoCount < 2;
+      }
+
+      if (canGenerate) {
+        // Choose a random selfie from the fixed gallery of approved realistic images
+        const randomIndex = Math.floor(Math.random() * LOCAL_APPROVED_SELFIES.length);
+        generatedImageUrl = LOCAL_APPROVED_SELFIES[randomIndex];
+        imageGenerated = true;
+        responseText = responseText.replace(/\[IMAGE_PROMPT:\s*([^\]]+)\]/gi, '').trim();
+      } else {
+        // Daily limit reached for Free or Referral user
+        responseText = responseText.replace(/\[IMAGE_PROMPT:\s*([^\]]+)\]/gi, '').trim();
+        const limitNotice = getPhotoLimitMessage(userTier === 'referral_premium' ? 'referral_premium' : 'free', language);
+        if (responseText && responseText.length > 5) {
+          responseText = `${responseText}\n\n${limitNotice}`;
+        } else {
+          responseText = limitNotice;
+        }
+      }
+    }
+
+    res.json({ content: responseText, imageUrl: generatedImageUrl, imageGenerated, updatedMemory, userTier });
+  } catch (error: any) {
+    console.error("Chat API error:", error?.message || error);
+    const lastUserMsg = req.body?.messages?.[req.body?.messages?.length - 1]?.content || "hello";
+    const smartFallback = generateSmartGirlfriendResponse({
+      lastMessage: lastUserMsg,
+      memory: req.body?.memory,
+      language: req.body?.language,
+      style: req.body?.style,
+      messages: req.body?.messages || []
+    });
+
+    let fbImageUrl: string | undefined = undefined;
+    let fbContent = smartFallback.content;
+    let fbImageGenerated = false;
+
+    const fbPromptMatch = fbContent.match(/\[IMAGE_PROMPT:\s*([^\]]+)\]/i);
+    const fbAskedPhoto = isMultilingualPhotoRequest(lastUserMsg);
+    const fbNeedsPhoto = Boolean(fbPromptMatch && fbPromptMatch[1]) || fbAskedPhoto;
+
+    const fbIsPremium = req.body?.isPremium ?? false;
+    const fbIsPaidPremium = req.body?.isPaidPremium ?? false;
+    const fbUserTier: 'free' | 'referral_premium' | 'paid_premium' = 
+      req.body?.userTier || (!fbIsPremium ? 'free' : fbIsPaidPremium ? 'paid_premium' : 'referral_premium');

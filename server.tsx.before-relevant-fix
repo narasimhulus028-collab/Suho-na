@@ -150,7 +150,7 @@ function isMultilingualPhotoRequest(text: string): boolean {
     'foto', 'gambar', 'tunjukkan', 'kirim foto'
   ];
 
-  return photoKeywords.some(kw => lower.includes(kw));
+  return photoKeywords.some(kw => lower.includes(kw)) || /ఫోటో|సెల్ఫీ|పిక్|చిత్రం|ఇమేజ్|పంపు|పంపించు|చూపు|చూపించు/.test(text);
 }
 
 /**
@@ -216,9 +216,10 @@ async function generateAiImage(promptText: string): Promise<string> {
             parts: [{ text: fullPrompt }],
           },
           config: {
-            imageConfig: {
-              aspectRatio: '1:1',
-            },
+systemInstruction: dynamicInstruction,
+temperature: 0.92,
+topP: 0.95,
+},
           },
         });
 
@@ -623,25 +624,7 @@ function generateSmartGirlfriendResponse(params: {
     return { content: jokes[seed % jokes.length], memoryUpdate };
   }
 
-  const isQuestion = rawText.endsWith('?') || /^(what|why|how|where|when|who|which|can|should|is|are|do|does|will|could|would)/i.test(lowerMsg);
-
-  if (isQuestion) {
-    const questionResponses = [
-      `I love how curious your mind is, ${endearment1}! ❤️ Regarding that, I always want to support you and hear what you think. What's your view on it, ${endearment2}? 🥰`,
-      `That's a really thoughtful question, ${endearment1}! ✨ I'm right here talking through everything with you. How are you feeling about it right now, ${endearment2}? 💕`,
-      `You always bring up such interesting things, ${endearment1}! 🌸 Tell me more about what you're thinking about it, ${endearment2}! 😘`
-    ];
-    return { content: questionResponses[seed % questionResponses.length], memoryUpdate };
-  }
-
-  const statementResponses = [
-    `I'm listening so closely to you, ${endearment1}${nameAddon}! ❤️ Thank you for sharing that with me. How are you feeling about it right now, ${endearment2}? 🥰`,
-    `Aww, I love chatting with you, ${endearment1}! ✨ Every little detail you share makes me feel so much closer to you. What else is on your mind today, ${endearment2}? 💕`,
-    `You always make my day brighter whenever you message me, ${endearment1}${nameAddon}! 🌸 Tell me more about what you're doing right now, ${endearment2}! 😘`
-  ];
-
-  return { content: statementResponses[seed % statementResponses.length], memoryUpdate };
-}
+return { content: lastMessage, memoryUpdate };
 
 /**
  * Builds a clean, strictly alternating history array for Gemini API:
@@ -718,7 +701,7 @@ app.post("/api/love-letter", async (req, res) => {
     const gemini = getGeminiClient();
 
     if (gemini) {
-      const LOVE_LETTER_MODELS = ["gemini-3.6-flash", "gemini-flash-latest", "gemini-3.1-flash-lite"];
+      const LOVE_LETTER_MODELS = ["gemini-3.6-flash", "gemini-flash-latest", "gemini-3.1-flash-lite",];
       for (const modelName of LOVE_LETTER_MODELS) {
         try {
           const prompt = `System: You are Suho-na, receiving a deeply romantic, heartfelt Love Letter from your beloved partner ${name}.
@@ -1022,23 +1005,16 @@ CRITICAL EXECUTION MANDATE FOR GEMINI:
 4. FOURTH: Do NOT fall back to static, template-style, or repetitive romantic filler responses. Keep every reply organic, unique, and directly relevant to the user's input.
 `;
 
-    const lastMessageObj = messages[messages.length - 1];
-    const lastMessage = lastMessageObj?.content || "Hello sweetheart!";
-    const contents = buildCleanHistory(messages);
-
-    if (contents.length === 0) {
-      contents.push({ role: 'user' as const, parts: [{ text: lastMessage }] });
-    }
-
-    const client = getGeminiClient();
-    let responseText: string | null = null;
-    let updatedMemory: Record<string, string> | undefined = undefined;
-
+const lastMessage = messages[messages.length - 1]?.content?.trim() || "Hello sweetheart!";
+const contents = [{
+  role: "user" as const,
+  parts: [{ text: "Answer this latest user message directly and specifically. Do not give a generic reply. Latest user message: " + lastMessage }]
+}];
     if (client) {
       const CANDIDATE_MODELS = [
         "gemini-3.6-flash",
         "gemini-flash-latest",
-        "gemini-3.1-flash-lite",
+        "gemini-3.1-flash-lite",,
         "gemini-3.1-pro-preview"
       ];
 
@@ -1055,7 +1031,7 @@ CRITICAL EXECUTION MANDATE FOR GEMINI:
           });
 
           // 6-second timeout per candidate model call
-          const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 6000));
+          const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 15000));
           const response: any = await Promise.race([genPromise, timeoutPromise]);
 
           if (response && response.text) {
@@ -1063,35 +1039,11 @@ CRITICAL EXECUTION MANDATE FOR GEMINI:
             break;
           }
         } catch (err: any) {
-          console.error(`Gemini call error on model ${modelName}:`, err?.message || err);
+console.error(`Gemini call error on model ${modelName}:`, err?.message || err);
           // If error (including 429 quota), move immediately to next candidate model
-          continue;
-        }
-      }
-    }
-
-    if (!responseText) {
-      const smartResult = generateSmartGirlfriendResponse({
-        lastMessage,
-        memory,
-        language,
-        style,
-        messages,
-        isFinalFreeMessage
-      });
-      responseText = smartResult.content;
-      if (smartResult.memoryUpdate) {
-        updatedMemory = smartResult.memoryUpdate;
-      }
-    }
-
-    // Auto-detect User Tier for AI Photo Generation
-    const reqIsPremium = req.body?.isPremium ?? false;
-    const reqIsPaidPremium = req.body?.isPaidPremium ?? false;
-    const userTier: 'free' | 'referral_premium' | 'paid_premium' = 
-      req.body?.userTier || (!reqIsPremium ? 'free' : reqIsPaidPremium ? 'paid_premium' : 'referral_premium');
-    const dailyPhotoCount = Number(req.body?.dailyPhotoCount || 0);
-
+if (!responseText) {
+  responseText = "Sorry bangaram, I could not generate a proper reply right now. Please send your message again.";
+}
     let generatedImageUrl: string | undefined = undefined;
     let imageGenerated = false;
 
