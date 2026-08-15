@@ -37,7 +37,7 @@ export default function ReferralModal({
 
   if (!isOpen) return null;
 
-  const referralLink = `${window.location.origin}?ref=${referralStats.referralCode}`;
+const referralLink = `${window.location.origin}/Suho-na/?ref=${referralStats.referralCode}`;
 
   const handleCopyCode = () => {
     navigator.clipboard.writeText(referralStats.referralCode);
