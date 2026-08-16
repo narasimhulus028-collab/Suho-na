@@ -1054,8 +1054,8 @@ CRITICAL EXECUTION MANDATE FOR GEMINI:
             },
           });
 
-          // 6-second timeout per candidate model call
-          const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 6000));
+          // 15-second timeout per candidate model call
+          const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 15000));
           const response: any = await Promise.race([genPromise, timeoutPromise]);
 
           if (response && response.text) {
