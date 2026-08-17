@@ -1108,35 +1108,41 @@ CRITICAL EXECUTION MANDATE FOR GEMINI:
       ];
 
       for (const modelName of CANDIDATE_MODELS) {
-        try {
-          const genPromise = client.models.generateContent({
-            model: modelName,
-            contents: contents,
-            config: {
-              systemInstruction: dynamicInstruction,
-              temperature: 0.75,
-              topP: 0.90,
-                maxOutputTokens: 1200,
-            },
-          });
+  try {
+    const genPromise = client.models.generateContent({
+      model: modelName,
+      contents: contents,
+      config: {
+        systemInstruction: dynamicInstruction,
+        temperature: 0.75,
+        topP: 0.90,
+        maxOutputTokens: 1200,
+      },
+    });
 
-          // 15-second timeout per candidate model call
-          const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 15000));
-          const response: any = await Promise.race([genPromise, timeoutPromise]);
+    const timeoutPromise = new Promise<null>((resolve) =>
+      setTimeout(() => resolve(null), 15000)
+    );
 
-          if (response && response.text) {
-            responseText = response.text.trim();
-            break;
-          }
-        } catch (err: any) {
-          console.error(`Gemini call error on model ${modelName}:`, err?.message || err);
-          // If error (including 429 quota), move immediately to next candidate model
-          continue;
-        }
-      }
+    const response: any = await Promise.race([
+      genPromise,
+      timeoutPromise
+    ]);
+
+    if (response && response.text) {
+      responseText = response.text.trim();
+      break;
     }
+  } catch (err: any) {
+    console.error(
+      `Gemini call error on model ${modelName}:`,
+      err?.message || err
+    );
+    continue;
+  }
+}
 
-    if (!responseText) {
+if (!responseText) {
       const smartResult = generateSmartGirlfriendResponse({
         lastMessage,
         memory,
