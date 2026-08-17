@@ -1,11 +1,12 @@
 [build]
-  command = "npm run build"
-  publish = "dist"
+command = "npm run build"
+publish = "dist"
 
 [functions]
-  directory = "netlify/functions"
+directory = "netlify/functions"
+external_node_modules = ["vite", "@vitejs/plugin-react", "@tailwindcss/vite"]
 
 [[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/api/:splat"
-  status = 200
+from = "/api/*"
+to = "/.netlify/functions/api/:splat"
+status = 200
