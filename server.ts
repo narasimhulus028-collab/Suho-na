@@ -1114,8 +1114,9 @@ CRITICAL EXECUTION MANDATE FOR GEMINI:
             contents: contents,
             config: {
               systemInstruction: dynamicInstruction,
-              temperature: 0.92,
-              topP: 0.95,
+              temperature: 0.75,
+              topP: 0.90,
+                maxOutputTokens: 1200,
             },
           });
 
