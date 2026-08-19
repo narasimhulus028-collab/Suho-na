@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Suho-na</title>
+</head>
+<body>
+<h2>💖 Suho-na</h2>
+<p>Your Suho-na referral is ready.</p>
+
+<button onclick="openApp()">Open Suho-na App</button>
+<br><br>
+<a href="/ref/Suho-na.apk" download>
+<button>Download Suho-na APK</button>
+</a>
+
+<script>
+const p = new URLSearchParams(location.search);
+const code = p.get("code") || p.get("ref");
+
+function openApp() {
+  if (code) {
+    location.href = "suho-na://ref?code=" + encodeURIComponent(code);
+  } else {
+    location.href = "suho-na://";
+  }
+}
+</script>
+</body>
+</html>
