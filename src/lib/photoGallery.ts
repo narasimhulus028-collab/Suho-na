@@ -20,7 +20,14 @@ export const LOCAL_SELFIE_PHOTOS: string[] = [
   selfiePinkSaree,
   selfieSatinBedroom,
   selfieCinematic,
-  selfieProfile
+  selfieProfile,
+  ...Object.values(
+    import.meta.glob('../assets/photos/suhona/*.{jpg,jpeg,png,webp}', {
+      eager: true,
+      import: 'default',
+      query: '?url'
+    })
+  )
 ];
 
 /**
