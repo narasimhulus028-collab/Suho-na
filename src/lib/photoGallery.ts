@@ -64,7 +64,10 @@ export function getRandomApprovedSelfie(customGallery?: Array<{ url: string }>, 
   const uploadedUrls = (customGallery || []).map(g => g.url).filter(Boolean);
   
   // If user has uploaded images in their gallery, pick strictly from uploaded images
-  const pool = uploadedUrls.length > 0 ? uploadedUrls : LOCAL_SELFIE_PHOTOS;
+  const pool = Array.from(new Set([
+  ...LOCAL_SELFIE_PHOTOS,
+  ...uploadedUrls
+]));
   
   const candidates = excludeUrl 
     ? pool.filter(url => url !== excludeUrl) 
