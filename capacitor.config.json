@@ -1,5 +1,5 @@
 {
-  "appId": "com.suhona.ai.app",
+  "appId": "com.suhona.app",
   "appName": "Suho-na",
   "webDir": "dist",
   "bundledWebRuntime": false,

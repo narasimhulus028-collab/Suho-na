@@ -1,3 +1,4 @@
+import { Share } from "@capacitor/share";
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Gift, Share2, Copy, Trophy, Check, Sparkles, Clock, X, CheckCircle2, Crown, MessageSquare, Phone, Mic, Image } from 'lucide-react';
@@ -37,33 +38,43 @@ export default function ReferralModal({
 
   if (!isOpen) return null;
 
-const referralLink = `${window.location.origin}/Suho-na/?ref=${referralStats.referralCode}`;
+const referralLink = `https://suho-na.netlify.app/Suho-na/?code=${encodeURIComponent(referralStats.referralCode)}`;
 
-  const handleCopyCode = () => {
-    navigator.clipboard.writeText(referralStats.referralCode);
+const handleCopyCode = async () => {
+  try {
+    await navigator.clipboard.writeText(referralStats.referralCode);
     setCopiedCode(true);
     setTimeout(() => setCopiedCode(false), 2500);
-  };
+  } catch (err) {
+    console.error("Referral code copy failed:", err);
+  }
+};
 
-  const handleShareLink = async () => {
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: 'Join Suho-na AI Girlfriend',
-          text: `Use my referral code ${referralStats.referralCode} to get 1 FREE PREMIUM DAY with Suho-na! 💕`,
-          url: referralLink,
-        });
-        return;
-      } catch (err) {
-        // Fallback to clipboard
-      }
+const handleShareLink = async () => {
+  const shareText = `Use my referral code ${referralStats.referralCode} to get 1 FREE PREMIUM DAY with Suho-na!`;
+
+  try {
+    await Share.share({
+      title: "Join Suho-na AI Girlfriend",
+      text: `${shareText}\n\n${referralLink}`,
+      dialogTitle: "Share Suho-na Referral",
+    });
+  } catch (err) {
+    console.error("Share failed:", err);
+
+    try {
+      await navigator.clipboard.writeText(
+        `${shareText}\n${referralLink}`
+      );
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2500);
+    } catch (copyErr) {
+      console.error("Fallback copy failed:", copyErr);
     }
-    navigator.clipboard.writeText(referralLink);
-    setCopiedLink(true);
-    setTimeout(() => setCopiedLink(false), 2500);
-  };
+  }
+};
 
-  const handleApplyCodeSubmit = (e: React.FormEvent) => {
+const handleApplyCodeSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputReferralCode.trim()) return;
     const res = onApplyReferralCode(inputReferralCode.trim());

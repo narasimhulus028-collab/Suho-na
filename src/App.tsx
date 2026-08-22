@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { App as CapacitorApp } from '@capacitor/app';
 import { Send, Heart, User, Loader2, Sparkles, MessageCircle, Mic, MicOff, Image as ImageIcon, Volume2, VolumeX, Moon, Sun, Download, Smartphone, Globe, Gamepad2, Phone, PhoneOff, Camera, Crown, Lock, Trophy, UserCheck, ShieldCheck, Gift, Feather, Mail, Smile, Settings as SettingsIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
@@ -632,17 +633,89 @@ export default function App() {
   };
 
   // Apply a referral code from someone else
-  const handleApplyReferralCode = (code: string) => {
-    if (code.toUpperCase() === referralStats.referralCode.toUpperCase()) {
-      return { success: false, message: "You cannot use your own referral code!" };
+const handleApplyReferralCode = (code: string) => {
+  const normalizedCode = code.trim().toUpperCase();
+
+  if (!normalizedCode) {
+    return {
+      success: false,
+      message: 'Please enter a referral code.'
+    };
+  }
+
+  if (normalizedCode === referralStats.referralCode.toUpperCase()) {
+    return {
+      success: false,
+      message: 'You cannot use your own referral code!'
+    };
+  }
+
+  const alreadyApplied = localStorage.getItem('suhona_applied_referral_code');
+
+  if (alreadyApplied === normalizedCode) {
+    return {
+      success: false,
+      message: 'This referral code has already been applied.'
+    };
+  }
+
+  addPremiumDaysFromReferral(1);
+  addXp(50, 'Applied Referral Code (+50 XP)');
+  localStorage.setItem('suhona_applied_referral_code', normalizedCode);
+
+  showToast(
+    '🐷 Referral Code Applied!',
+    'Welcome bonus active: +1 Premium Day added & stacked! ✩',
+    '📁'
+  );
+
+  return {
+    success: true,
+    message: 'Referral code applied! +1 Premium Day unlocked!'
+  };
+};
+
+// Automatically apply referral code from web URL or Android deep link
+useEffect(() => {
+  const applyCode = (code: string | null) => {
+    if (!code) return;
+
+    const normalizedCode = code.trim().toUpperCase();
+    if (!normalizedCode) return;
+
+    const alreadyApplied = localStorage.getItem("suhona_applied_referral_code");
+    if (alreadyApplied === normalizedCode) return;
+
+    const result = handleApplyReferralCode(normalizedCode);
+
+    if (result.success) {
+      localStorage.setItem("suhona_applied_referral_code", normalizedCode);
     }
-    addPremiumDaysFromReferral(1);
-    showToast(`🎁 Referral Code Applied!`, `Welcome bonus active: +1 Premium Day added & stacked!`, '✨');
-    addXp(50, 'Applied Referral Code (+50 XP)');
-    return { success: true, message: "Referral code applied! +1 Premium Day unlocked!" };
   };
 
-  // Roleplay & Games Modals
+  // Web URL: ?ref=SUHONA-LOVE789
+  const params = new URLSearchParams(window.location.search);
+  applyCode(params.get("ref"));
+
+  // Android deep link: suho-na://ref?code=SUHONA-LOVE789
+  const handleDeepLink = ({ url }: { url: string }) => {
+    try {
+      const parsed = new URL(url);
+      const code = parsed.searchParams.get("code") || parsed.searchParams.get("ref");
+      applyCode(code);
+    } catch (error) {
+      console.error("Referral deep link error:", error);
+    }
+  };
+
+  const listenerPromise = CapacitorApp.addListener("appUrlOpen", handleDeepLink);
+
+  return () => {
+    listenerPromise.then(listener => listener.remove());
+  };
+}, []);
+
+// Roleplay & Games Modals
   const [isRoleplayOpen, setIsRoleplayOpen] = useState(false);
   const [isGamesOpen, setIsGamesOpen] = useState(false);
   const [isCallModalOpen, setIsCallModalOpen] = useState(false);

@@ -11,17 +11,10 @@
     <meta name="apple-mobile-web-app-title" content="Suho-na" />
     <link rel="apple-touch-icon" href="/assets/photos/suhona_logo.jpg" />
     <link rel="icon" type="image/jpeg" href="/assets/photos/suhona_logo.jpg" />
-  
-<meta name="description" content="Suho-na is your caring AI girlfriend for romantic chat, emotional support, memories, AI photos and more.">
-<meta name="robots" content="index, follow">
-<meta name="keywords" content="Suho-na, AI girlfriend, AI girlfriend chat, romantic AI chat, virtual girlfriend, AI companion">
-<link rel="canonical" href="https://suho-na.netlify.app/Suho-na/">
-    <meta name="google-site-verification" content="XHVv5xUNndLb5LQH3shs3b10dPtKWs5sV5ed73XeC8w" />
-  <script type="module" crossorigin src="/assets/index-BKNGOwCi.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-tzVN04v1.css">
-</head>
+  </head>
   <body>
     <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
 

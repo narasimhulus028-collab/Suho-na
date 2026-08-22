@@ -9,10 +9,10 @@ export async function fetchWithRetry(
   let lastError: any = null;
 
   const isCapacitorApp =
-typeof window !== 'undefined' &&
-window.location.hostname === 'localhost';
+    typeof window !== 'undefined' &&
+    window.location.hostname === 'localhost';
 
-const fullUrl =
+  const fullUrl =
     typeof window !== 'undefined' && url.startsWith('/')
       ? `${isCapacitorApp ? 'http://127.0.0.1:3000' : window.location.origin}${url}`
       : url;

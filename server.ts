@@ -6,7 +6,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 export const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
@@ -1177,107 +1177,28 @@ CRITICAL EXECUTION MANDATE FOR GEMINI:
     const userAskedForPhoto = isMultilingualPhotoRequest(lastMessage);
     const needsPhoto = Boolean(imagePromptMatch && imagePromptMatch[1]) || userAskedForPhoto;
 
-    if (needsPhoto) {
-      // Apply tier limits:
-      // 1. Paid Premium Subscribers: Unlimited AI photo generation
-      // 2. Referral Premium Users: Maximum 4 AI-generated photos per day (resets 24h)
-      // 3. Free Users: 2 AI-generated photos per day (resets 24h)
-      let canGenerate = false;
-      if (userTier === 'paid_premium') {
-        canGenerate = true;
-      } else if (userTier === 'referral_premium') {
-        canGenerate = dailyPhotoCount < 4;
-      } else {
-        canGenerate = dailyPhotoCount < 2;
-      }
-
-      if (canGenerate) {
-        // Choose a random selfie from the fixed gallery of approved realistic images
-        const randomIndex = Math.floor(Math.random() * LOCAL_APPROVED_SELFIES.length);
-        generatedImageUrl = LOCAL_APPROVED_SELFIES[randomIndex];
-        imageGenerated = true;
-        responseText = responseText.replace(/\[IMAGE_PROMPT:\s*([^\]]+)\]/gi, '').trim();
-      } else {
-        // Daily limit reached for Free or Referral user
-        responseText = responseText.replace(/\[IMAGE_PROMPT:\s*([^\]]+)\]/gi, '').trim();
-        const limitNotice = getPhotoLimitMessage(userTier === 'referral_premium' ? 'referral_premium' : 'free', language);
-        if (responseText && responseText.length > 5) {
-          responseText = `${responseText}\n\n${limitNotice}`;
-        } else {
-          responseText = limitNotice;
-        }
-      }
-    }
-
-    res.json({ content: responseText, imageUrl: generatedImageUrl, imageGenerated, updatedMemory, userTier });
-  } catch (error: any) {
-    console.error("Chat API error:", error?.message || error);
-    const lastUserMsg = req.body?.messages?.[req.body?.messages?.length - 1]?.content || "hello";
-    const smartFallback = generateSmartGirlfriendResponse({
-      lastMessage: lastUserMsg,
-      memory: req.body?.memory,
-      language: req.body?.language,
-      style: req.body?.style,
-      messages: req.body?.messages || []
-    });
-
-    let fbImageUrl: string | undefined = undefined;
-    let fbContent = smartFallback.content;
-    let fbImageGenerated = false;
-
-    const fbPromptMatch = fbContent.match(/\[IMAGE_PROMPT:\s*([^\]]+)\]/i);
-    const fbAskedPhoto = isMultilingualPhotoRequest(lastUserMsg);
-    const fbNeedsPhoto = Boolean(fbPromptMatch && fbPromptMatch[1]) || fbAskedPhoto;
-
-    const fbIsPremium = req.body?.isPremium ?? false;
-    const fbIsPaidPremium = req.body?.isPaidPremium ?? false;
-    const fbUserTier: 'free' | 'referral_premium' | 'paid_premium' = 
-      req.body?.userTier || (!fbIsPremium ? 'free' : fbIsPaidPremium ? 'paid_premium' : 'referral_premium');
-    const fbDailyCount = Number(req.body?.dailyPhotoCount || 0);
-
-    if (fbNeedsPhoto) {
-      let canGenFb = false;
-      if (fbUserTier === 'paid_premium') canGenFb = true;
-      else if (fbUserTier === 'referral_premium') canGenFb = fbDailyCount < 4;
-      else canGenFb = fbDailyCount < 2;
-
-      if (canGenFb) {
-        const randomIndex = Math.floor(Math.random() * LOCAL_APPROVED_SELFIES.length);
-        fbImageUrl = LOCAL_APPROVED_SELFIES[randomIndex];
-        fbImageGenerated = true;
-        fbContent = fbContent.replace(/\[IMAGE_PROMPT:\s*([^\]]+)\]/gi, '').trim();
-      } else {
-        fbContent = fbContent.replace(/\[IMAGE_PROMPT:\s*([^\]]+)\]/gi, '').trim();
-        const limitNotice = getPhotoLimitMessage(fbUserTier === 'referral_premium' ? 'referral_premium' : 'free', req.body?.language);
-        fbContent = fbContent ? `${fbContent}\n\n${limitNotice}` : limitNotice;
-      }
-    }
-
-    res.json({ content: fbContent, imageUrl: fbImageUrl, imageGenerated: fbImageGenerated, updatedMemory: smartFallback.memoryUpdate, userTier: fbUserTier });
-  }
+    res.json({
+  content: responseText,
+  imageUrl: undefined,
+  imageGenerated: false,
+  updatedMemory,
+  userTier
 });
 
-app.post("/api/generate-image", async (req, res) => {
-  try {
-    const { prompt, userTier = 'paid_premium', dailyPhotoCount = 0 } = req.body;
-    if (!prompt) return res.status(400).json({ error: "Prompt is required" });
+} catch (error: any) {
+  console.error("Chat API error:", error?.message || error);
 
-    if (userTier === 'referral_premium' && dailyPhotoCount >= 4) {
-      return res.status(403).json({ error: "Referral Premium users are limited to 4 AI photos per day. Daily limit resets in 24 hours." });
-    }
-    if (userTier === 'free' && dailyPhotoCount >= 2) {
-      return res.status(403).json({ error: "Free users are limited to 2 AI photos per day. Subscribe to Premium Gold for unlimited photos." });
-    }
+  return res.status(500).json({
+    error: "Chat API error"
+  });
+}
 
-    let enhancedPrompt = prompt;
-    if (userTier === 'paid_premium') {
-      enhancedPrompt = `masterpiece, award-winning 8k UHD ultra-realistic photograph, ${prompt}`;
-    }
-
-    const imageUrl = await generateAiImage(enhancedPrompt);
-    res.json({ imageUrl, imageGenerated: true });
-  } catch (err: any) {
-    console.error("Generate image endpoint error:", err);
-    res.status(500).json({ error: "Failed to generate image" });
-  }
 });
+
+
+
+if (process.env.NETLIFY !== 'true') {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Suho-na API running on http://0.0.0.0:${PORT}`);
+  });
+}
