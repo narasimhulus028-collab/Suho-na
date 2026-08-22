@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.suhona.ai.app",
+      "sha256_cert_fingerprints": [
+        "C4:43:D0:CD:16:34:AB:45:2B:4A:28:75:3B:38:68:FA:D2:83:EA:E9:96:EB:FB:24:01:DA:46:5E:E2:83:97:B4"
+      ]
+    }
+  }
+]
